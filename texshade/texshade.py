@@ -3,7 +3,7 @@
 import scipy.fftpack as scifft
 import numpy as np
 
-nextpow2 = lambda v: 1 << int(np.ceil(np.log2(v)))
+nextpow2 = lambda v: list(map(int, 2**np.ceil(np.log2(v))))
 
 
 def texshade(x, alpha, verbose=True):
@@ -12,7 +12,7 @@ def texshade(x, alpha, verbose=True):
     fy = scifft.rfftfreq(Nyx[0])[:, np.newaxis].astype(x.dtype)
     fx = scifft.rfftfreq(Nyx[1])[np.newaxis, :].astype(x.dtype)
     H2 = (fx**2 + fy**2)**(alpha / 2.0)
-    if verbose: print "Generated filter"
+    if verbose: print("Generated filter")
 
     rfft2 = lambda x: scifft.rfft(scifft.rfft(x, Nyx[1], 1, True), Nyx[0], 0,
                                   True)
@@ -20,9 +20,9 @@ def texshade(x, alpha, verbose=True):
                                     overwrite_x=True)
 
     xr = rfft2(x) * H2
-    if verbose: print "Completed frequency domain operations"
+    if verbose: print("Completed frequency domain operations")
     H2 = None  # potentially trigger GC here to reclaim H2's memory
     xr = irfft2(xr)
-    if verbose: print "Back to spatial-domain"
+    if verbose: print("Back to spatial-domain")
 
     return xr[:x.shape[0], :x.shape[1]]

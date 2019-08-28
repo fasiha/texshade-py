@@ -31,7 +31,7 @@ Let's implement this in Python.
 import scipy.fftpack as scifft
 import numpy as np
 
-nextpow2 = lambda v: 1 << int(np.ceil(np.log2(v)))
+nextpow2 = lambda v: list(map(int, 2**np.ceil(np.log2(v))))
 
 
 def texshade(x, alpha, verbose=True):
@@ -40,7 +40,7 @@ def texshade(x, alpha, verbose=True):
     fy = scifft.rfftfreq(Nyx[0])[:, np.newaxis].astype(x.dtype)
     fx = scifft.rfftfreq(Nyx[1])[np.newaxis, :].astype(x.dtype)
     H2 = (fx**2 + fy**2)**(alpha / 2.0)
-    if verbose: print "Generated filter"
+    if verbose: print("Generated filter")
 
     rfft2 = lambda x: scifft.rfft(scifft.rfft(x, Nyx[1], 1, True), Nyx[0], 0,
                                   True)
@@ -48,10 +48,10 @@ def texshade(x, alpha, verbose=True):
                                     overwrite_x=True)
 
     xr = rfft2(x) * H2
-    if verbose: print "Completed frequency domain operations"
+    if verbose: print("Completed frequency domain operations")
     H2 = None  # potentially trigger GC here to reclaim H2's memory
     xr = irfft2(xr)
-    if verbose: print "Back to spatial-domain"
+    if verbose: print("Back to spatial-domain")
 
     return xr[:x.shape[0], :x.shape[1]]
 ```
@@ -94,5 +94,89 @@ Center      (  10.5000000,   0.5000000) ( 10d30' 0.00"E,  0d30' 0.00"N)
 Band 1 Block=10801x1 Type=Int16, ColorInterp=Gray
   NoData Value=-32768
   Unit Type: m
+```
+
+```py
+# export convert.py
+"""
+Quick script intended to be used only by a user to convert a specific
+GeoTIF to a NPY file for pure-Numpy non-GDAL demo.
+"""
+import numpy as np
+import gdal, gdalconst
+fname = 'merged.tif'
+
+
+def filenameToData(fname, dtype=np.float32):
+    """Reads all bands"""
+    fileHandle = gdal.Open(fname, gdalconst.GA_ReadOnly)
+    result = np.squeeze(
+        np.dstack([
+            fileHandle.GetRasterBand(n + 1).ReadAsArray()
+            for n in range(fileHandle.RasterCount)
+        ]))
+    if dtype is not None:
+        return result.astype(dtype)
+    return result
+
+
+np.save(fname, filenameToData(fname))
+```
+
+```py
+# export demo.py
+import texshade
+import numpy as np
+fname = 'merged.tif.npy'
+
+arr = np.load(fname)
+print(arr)
+tex = texshade.texshade(arr, 0.8)
+np.save(fname + '.tex', tex)
+```
+
+```py
+# export postprocess.py
+import numpy as np
+from PIL import Image
+
+arr = np.load('merged.tif.npy')
+
+tex = np.load('merged.tif.npy.tex.npy')
+minmax = np.quantile(tex.ravel(), [.01, .99])
+
+
+def touint(x, cmin, cmax, dtype=np.uint8):
+    # clamp x between cmin and cmax
+    x[x < cmin] = cmin
+    x[x > cmax] = cmax
+    # map [cmin, cmax] to [0, 2**depth-1-eps] linearly
+    maxval = 2**(8 * dtype().itemsize) - 1e-3
+    slope = (maxval - 1.0) / (cmax - cmin)
+    ret = slope * (x - cmin) + 1
+    return (ret).astype(dtype)
+
+
+scaled = touint(tex, minmax[0], minmax[1], np.uint8)
+
+
+def toPng(scaled, fname):
+    newimage = Image.new(
+        'L', (scaled.shape[1], scaled.shape[0]))  # type, (width, height)
+    newimage.putdata(scaled.ravel())
+    newimage.save(fname)
+
+
+toPng(scaled, 'scaled.png')
+toPng(touint(arr, np.min(arr), np.max(arr), np.uint8), 'orig.png')
+```
 
 ```
+for i in orig.png scaled.png; do convert -filter Mitchell -sampling-factor 1x1 -quality 90 -resize 2048 $i $i.small.png; done
+```
+
+### Original
+![original downsampled](orig.png.small.png)
+
+### Tex-shaded
+![tex-shaded downsampled](scaled.png.small.png)

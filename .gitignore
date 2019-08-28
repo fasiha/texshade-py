@@ -5,3 +5,7 @@ lib/
 *.tif
 *.bin
 node_modules/
+*.npy
+__pycache__
+.vscode
+.DS_Store
