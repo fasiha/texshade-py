@@ -10,16 +10,14 @@ fname = 'merged.tif'
 
 
 def filenameToData(fname, dtype=np.float32):
-    """Reads all bands"""
-    fileHandle = gdal.Open(fname, gdalconst.GA_ReadOnly)
-    result = np.squeeze(
-        np.dstack([
-            fileHandle.GetRasterBand(n + 1).ReadAsArray()
-            for n in range(fileHandle.RasterCount)
-        ]))
-    if dtype is not None:
-        return result.astype(dtype)
-    return result
+  """Reads all bands"""
+  fileHandle = gdal.Open(fname, gdalconst.GA_ReadOnly)
+  result = np.squeeze(
+      np.dstack(
+          [fileHandle.GetRasterBand(n + 1).ReadAsArray() for n in range(fileHandle.RasterCount)]))
+  if dtype is not None:
+    return result.astype(dtype)
+  return result
 
 
 np.save(fname, filenameToData(fname))
