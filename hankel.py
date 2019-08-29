@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 
-import pylab as plt
-plt.ion()
 from mpmath import hyper
 import numpy as np
 from scipy import signal
-from scipy.signal import convolve2d, convolve
+from scipy.signal import convolve2d
 import numpy.fft as fft
 import functools
 from scipy.interpolate import interp1d
@@ -34,14 +32,19 @@ def vec(v):
   return v.reshape(v.size, -1)
 
 
-rvec = np.arange(-150, 150)
-rmat = np.sqrt(vec(rvec)**2 + vec(rvec).T**2)
+def fullHankel(n, alpha, samples=None):
+  if not samples:
+    samples = n * 100
+  rvec = np.arange(-n, n)
+  rmat = np.sqrt(vec(rvec)**2 + vec(rvec).T**2)
 
-r = np.linspace(np.sqrt(2) * -150 * 1.01, np.sqrt(2) * 150 * 1.01, 10000)
-h = np.array(list(map(lambda x: spatial(x, 0.8), r)))
-oned = interp1d(r, h)
-hmat = oned(rmat)
-# hmat = np.reshape(list(map(lambda x: spatial(x, 1.0), rmat.ravel())), rmat.shape)
+  r = np.linspace(np.sqrt(2) * -n * 1.01, np.sqrt(2) * n * 1.01, samples)
+  h = np.array(list(map(lambda x: spatial(x, alpha), r)))
+  oned = interp1d(r, h)
+  hmat = oned(rmat)
+  # hmat = np.reshape(list(map(lambda x: spatial(x, 1.0), rmat.ravel())), rmat.shape)
+  return hmat
+
 
 F2sym = lambda arr: fft.fftshift(fft.fft2(fft.ifftshift(arr)))
 
@@ -64,13 +67,28 @@ def plotF2sym(arr):
       origin='lower')
 
 
-plotF2sym(hmat)
-plt.title('Frequency response of full Hankel filter')
+def halfband(hmat, taps=32):
+  hbFilter = design(32)
+  doubleFilter = convolve2d(
+      convolve2d(hmat, vec(hbFilter), mode='same'), vec(hbFilter).T, mode='same')
+  n = hmat.shape[0]
+  finalFilter = doubleFilter[:-1:2, :-1:2] if n % 4 == 0 else doubleFilter[1:-1:2, 1:-1:2]
+  return finalFilter
 
-hbFilter = design(32)
-doubleFilter = convolve2d(
-    convolve2d(hmat, vec(hbFilter), mode='same'), vec(hbFilter).T, mode='same')
-finalFilter = doubleFilter[:-1:2, :-1:2] if r.size % 4 == 0 else doubleFilter[1:-1:2, 1:-1:2]
 
-plotF2sym(finalFilter)
-plt.title('Frequency response of half-banded Hankel filter')
+if __name__ == '__main__':
+  import pylab as plt
+  plt.ion()
+
+  hmat = fullHankel(150, 0.8)
+
+  plotF2sym(hmat)
+  plt.title('Frequency response of full Hankel filter')
+  plt.savefig('full-hankel.png', dpi=300)
+  plt.savefig('full-hankel.svg', dpi=300)
+
+  finalFilter = halfband(hmat, 32)
+  plotF2sym(finalFilter)
+  plt.title('Frequency response of half-banded Hankel filter')
+  plt.savefig('half-hankel.png', dpi=300)
+  plt.savefig('half-hankel.svg', dpi=300)

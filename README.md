@@ -139,11 +139,6 @@ np.save(fname + '.tex', tex)
 import numpy as np
 from PIL import Image
 
-arr = np.load('merged.tif.npy')
-
-tex = np.load('merged.tif.npy.tex.npy')
-minmax = np.quantile(tex.ravel(), [.01, .99])
-
 
 def touint(x, cmin, cmax, dtype=np.uint8):
   # clamp x between cmin and cmax
@@ -156,17 +151,19 @@ def touint(x, cmin, cmax, dtype=np.uint8):
   return (ret).astype(dtype)
 
 
-scaled = touint(tex, minmax[0], minmax[1], np.uint8)
-
-
 def toPng(scaled, fname):
   newimage = Image.new('L', (scaled.shape[1], scaled.shape[0]))  # type, (width, height)
   newimage.putdata(scaled.ravel())
   newimage.save(fname)
 
 
-toPng(scaled, 'scaled.png')
-toPng(touint(arr, np.min(arr), np.max(arr), np.uint8), 'orig.png')
+if __name__ == '__main__':
+  arr = np.load('merged.tif.npy')
+  tex = np.load('merged.tif.npy.tex.npy')
+  minmax = np.quantile(tex.ravel(), [.01, .99])
+  scaled = touint(tex, minmax[0], minmax[1], np.uint8)
+  toPng(scaled, 'scaled.png')
+  toPng(touint(arr, np.min(arr), np.max(arr), np.uint8), 'orig.png')
 ```
 
 ```
@@ -183,12 +180,10 @@ for i in orig.png scaled.png; do convert -filter Mitchell -sampling-factor 1x1 -
 
 ```py
 # export hankel.py
-import pylab as plt
-plt.ion()
 from mpmath import hyper
 import numpy as np
 from scipy import signal
-from scipy.signal import convolve2d, convolve
+from scipy.signal import convolve2d
 import numpy.fft as fft
 import functools
 from scipy.interpolate import interp1d
@@ -217,14 +212,19 @@ def vec(v):
   return v.reshape(v.size, -1)
 
 
-rvec = np.arange(-150, 150)
-rmat = np.sqrt(vec(rvec)**2 + vec(rvec).T**2)
+def fullHankel(n, alpha, samples=None):
+  if not samples:
+    samples = n * 100
+  rvec = np.arange(-n, n)
+  rmat = np.sqrt(vec(rvec)**2 + vec(rvec).T**2)
 
-r = np.linspace(np.sqrt(2) * -150 * 1.01, np.sqrt(2) * 150 * 1.01, 10000)
-h = np.array(list(map(lambda x: spatial(x, 0.8), r)))
-oned = interp1d(r, h)
-hmat = oned(rmat)
-# hmat = np.reshape(list(map(lambda x: spatial(x, 1.0), rmat.ravel())), rmat.shape)
+  r = np.linspace(np.sqrt(2) * -n * 1.01, np.sqrt(2) * n * 1.01, samples)
+  h = np.array(list(map(lambda x: spatial(x, alpha), r)))
+  oned = interp1d(r, h)
+  hmat = oned(rmat)
+  # hmat = np.reshape(list(map(lambda x: spatial(x, 1.0), rmat.ravel())), rmat.shape)
+  return hmat
+
 
 F2sym = lambda arr: fft.fftshift(fft.fft2(fft.ifftshift(arr)))
 
@@ -247,20 +247,31 @@ def plotF2sym(arr):
       origin='lower')
 
 
-plotF2sym(hmat)
-plt.title('Frequency response of full Hankel filter')
-plt.savefig('full-hankel.png', dpi=300)
-plt.savefig('full-hankel.svg', dpi=300)
+def halfband(hmat, taps=32):
+  hbFilter = design(32)
+  doubleFilter = convolve2d(
+      convolve2d(hmat, vec(hbFilter), mode='same'), vec(hbFilter).T, mode='same')
+  n = hmat.shape[0]
+  finalFilter = doubleFilter[:-1:2, :-1:2] if n % 4 == 0 else doubleFilter[1:-1:2, 1:-1:2]
+  return finalFilter
 
-hbFilter = design(32)
-doubleFilter = convolve2d(
-    convolve2d(hmat, vec(hbFilter), mode='same'), vec(hbFilter).T, mode='same')
-finalFilter = doubleFilter[:-1:2, :-1:2] if r.size % 4 == 0 else doubleFilter[1:-1:2, 1:-1:2]
 
-plotF2sym(finalFilter)
-plt.title('Frequency response of half-banded Hankel filter')
-plt.savefig('half-hankel.png', dpi=300)
-plt.savefig('half-hankel.svg', dpi=300)
+if __name__ == '__main__':
+  import pylab as plt
+  plt.ion()
+
+  hmat = fullHankel(150, 0.8)
+
+  plotF2sym(hmat)
+  plt.title('Frequency response of full Hankel filter')
+  plt.savefig('full-hankel.png', dpi=300)
+  plt.savefig('full-hankel.svg', dpi=300)
+
+  finalFilter = halfband(hmat, 32)
+  plotF2sym(finalFilter)
+  plt.title('Frequency response of half-banded Hankel filter')
+  plt.savefig('half-hankel.png', dpi=300)
+  plt.savefig('half-hankel.svg', dpi=300)
 ```
 
 ![Frequency response of full Hankel filter](full-hankel.png)
@@ -268,3 +279,46 @@ plt.savefig('half-hankel.svg', dpi=300)
 ![Frequency response of half-banded Hankel filter](half-hankel.png)
 
 The final plot above is the 2D filter that closely-approximates the full-resolution frequency-domain fractional-Laplacian operator.
+
+```py
+# export hankel-demo.py
+import numpy as np
+import hankel
+import postprocess
+import numpy.fft as fft
+
+nextpow2 = lambda v: list(map(int, 2**np.ceil(np.log2(v))))
+
+fname = 'merged.tif.npy'
+arr = np.load(fname)
+Xf = fft.rfft2(arr, nextpow2(np.array(arr.shape) + 1000))
+
+h = hankel.halfband(hankel.fullHankel(1000, 0.8), 64)
+# tex = convolve2d(arr, h, mode='same')
+Hf = fft.rfft2(h, Xf.shape)
+tex = fft.irfft2(Xf * np.conj(Hf))
+
+minmax = np.quantile(tex.ravel(), [.01, .99])
+scaled = postprocess.touint(tex, minmax[0], minmax[1], np.uint8)
+postprocess.toPng(scaled, '4hankel-texshade.png')
+```
+
+```py
+# export compare.py
+import texshade
+import postprocess
+import numpy as np
+fname = 'merged.tif.npy'
+
+arr = np.load(fname)
+
+tex = texshade.texshade(arr, 0.8)
+minmax = np.quantile(tex.ravel(), [.01, .99])
+scaled = postprocess.touint(tex, minmax[0], minmax[1], np.uint8)
+postprocess.toPng(scaled, 'scaled-0.8.png')
+
+tex = texshade.texshade(arr, 0.4)
+minmax = np.quantile(tex.ravel(), [.01, .99])
+scaled = postprocess.touint(tex, minmax[0], minmax[1], np.uint8)
+postprocess.toPng(scaled, 'scaled-0.4.png')
+```
