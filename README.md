@@ -212,17 +212,19 @@ def vec(v):
   return v.reshape(v.size, -1)
 
 
-def fullHankel(n, alpha, samples=None):
-  if not samples:
-    samples = n * 100
+def fullHankel(n, alpha, interpMethod=True, sampleSpacing=None):
   rvec = np.arange(-n, n)
   rmat = np.sqrt(vec(rvec)**2 + vec(rvec).T**2)
 
-  r = np.linspace(np.sqrt(2) * -n * 1.01, np.sqrt(2) * n * 1.01, samples)
-  h = np.array(list(map(lambda x: spatial(x, alpha), r)))
-  oned = interp1d(r, h)
-  hmat = oned(rmat)
-  # hmat = np.reshape(list(map(lambda x: spatial(x, 1.0), rmat.ravel())), rmat.shape)
+  if interpMethod:
+    if not sampleSpacing:
+      sampleSpacing = 1e-2
+    data = precomputeLoad(alpha, np.ceil(np.sqrt(2) * n * 1.01), sampleSpacing)
+    oned = interp1d(data['r'], data['h'])
+    hmat = oned(rmat)
+  else:
+    fun = np.vectorize(lambda x: spatial(x, alpha))
+    hmat = fun(rmat)
   return hmat
 
 
@@ -248,7 +250,7 @@ def plotF2sym(arr):
 
 
 def halfband(hmat, taps=32):
-  hbFilter = design(32)
+  hbFilter = design(taps)
   doubleFilter = convolve2d(
       convolve2d(hmat, vec(hbFilter), mode='same'), vec(hbFilter).T, mode='same')
   n = hmat.shape[0]
@@ -256,22 +258,64 @@ def halfband(hmat, taps=32):
   return finalFilter
 
 
+def precomputeLoad(alpha, N, spacing):
+  import os.path
+  fun = np.vectorize(lambda x: spatial(x, alpha))
+  r = np.arange(0, N, spacing)
+  fname = 'hankel-alpha-{}'.format(alpha)
+  if os.path.isfile(fname + '.npz'):
+    npz = np.load(fname + '.npz')
+    rsave = npz['x']
+    hsave = npz['y']
+
+    rnew = np.sort(np.setdiff1d(r, rsave))
+    hnew = fun(rnew) if rnew.size > 0 else []
+
+    r = np.hstack([rsave, rnew])
+    h = np.hstack([hsave, hnew])
+    idx = np.argsort(r)  # wasteful but resorting 1k vec is fast
+    r = r[idx]
+    h = h[idx]
+  else:
+    h = fun(r)
+  np.savez(fname, x=r, y=h)
+  return dict(r=r, h=h)
+
+
 if __name__ == '__main__':
   import pylab as plt
   plt.ion()
 
-  hmat = fullHankel(150, 0.8)
+  N = 500
+  hmat = fullHankel(N, 0.8)
 
   plotF2sym(hmat)
   plt.title('Frequency response of full Hankel filter')
   plt.savefig('full-hankel.png', dpi=300)
   plt.savefig('full-hankel.svg', dpi=300)
 
-  finalFilter = halfband(hmat, 32)
+  finalFilter = halfband(hmat, 128)
   plotF2sym(finalFilter)
   plt.title('Frequency response of half-banded Hankel filter')
   plt.savefig('half-hankel.png', dpi=300)
   plt.savefig('half-hankel.svg', dpi=300)
+
+  Hf = np.real(F2sym(hmat))
+  h, w = Hf.shape
+  x = np.ceil(np.arange(w) - w / 2) / w
+  x = x / .5 * 2
+  plt.figure()
+  plt.plot(x, Hf[N, :], x, x**.8)
+
+  H2f = np.real(F2sym(finalFilter))
+  h2, w2 = H2f.shape
+  x2 = np.ceil(np.arange(w2) - w2 / 2) / w2
+  x2 = x2 / .5 * 2
+  remmax = lambda x: x / np.max(x)
+  plt.figure()
+  plt.plot(x2, H2f[N // 2, :], x2,
+           np.abs(x2)**.8, x2,
+           remmax(np.abs(x2)**.8) * np.max(H2f[N // 2, :]))
 ```
 
 ![Frequency response of full Hankel filter](full-hankel.png)
@@ -284,41 +328,48 @@ The final plot above is the 2D filter that closely-approximates the full-resolut
 # export hankel-demo.py
 import numpy as np
 import hankel
+import texshade
 import postprocess
-import numpy.fft as fft
-
+from scipy.signal import fftconvolve
 nextpow2 = lambda v: list(map(int, 2**np.ceil(np.log2(v))))
 
 fname = 'merged.tif.npy'
 arr = np.load(fname)
-Xf = fft.rfft2(arr, nextpow2(np.array(arr.shape) + 1000))
 
-h = hankel.halfband(hankel.fullHankel(1000, 0.8), 64)
-# tex = convolve2d(arr, h, mode='same')
-Hf = fft.rfft2(h, Xf.shape)
-tex = fft.irfft2(Xf * np.conj(Hf))
+clip = True
+if clip:
+  arr = arr[-1500:, -1500:]
 
-minmax = np.quantile(tex.ravel(), [.01, .99])
-scaled = postprocess.touint(tex, minmax[0], minmax[1], np.uint8)
-postprocess.toPng(scaled, '4hankel-texshade.png')
+
+def texToFile(tex, fname):
+  minmax = np.quantile(tex.ravel(), [.01, .99])
+  scaled = postprocess.touint(tex, minmax[0], minmax[1], np.uint8)
+  postprocess.toPng(scaled, fname)
+
+
+alpha = 0.8
+
+texToFile(
+    texshade.texshade(arr, alpha),
+    'orig-texshade-alpha-{}{}.png'.format(alpha, '-clip' if clip else ''))
+
+Nwidth = 500
+Nhalfband = 128
+
+h = hankel.halfband(hankel.fullHankel(Nwidth, alpha), Nhalfband)
+texToFile(
+    fftconvolve(arr, h, mode='same'),
+    'hankel-texshade-alpha-{}-n-{}{}.png'.format(alpha, Nwidth, '-clip' if clip else ''))
 ```
 
-```py
-# export compare.py
-import texshade
-import postprocess
-import numpy as np
-fname = 'merged.tif.npy'
+We can compare the output of the original texture-shading algorithm:
 
-arr = np.load(fname)
+![Texshaded clip](orig-texshade-alpha-0.8-clip.png)
 
-tex = texshade.texshade(arr, 0.8)
-minmax = np.quantile(tex.ravel(), [.01, .99])
-scaled = postprocess.touint(tex, minmax[0], minmax[1], np.uint8)
-postprocess.toPng(scaled, 'scaled-0.8.png')
+with that of the Hankel approximation:
 
-tex = texshade.texshade(arr, 0.4)
-minmax = np.quantile(tex.ravel(), [.01, .99])
-scaled = postprocess.touint(tex, minmax[0], minmax[1], np.uint8)
-postprocess.toPng(scaled, 'scaled-0.4.png')
-```
+![Hankel-approximated texshaded clip](hankel-texshade-alpha-0.8-n-500-clip.png)
+
+Both are very close. Toggling between them only reveals slight contrast differences due to the different levels obtained for the quantiles—these differences are likely caused by the artifacts at the edges.
+
+In the above demo code, we ask Scipy's [`fftconvolve`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.fftconvolve.html) to apply the spatial-domain filtering, which behind the scenes uses a full-sized FFT just like the original method. However, we can make this much more memory-efficient, while retaining its speed, by using the overlap-add (or overlap-save) technique of fast-convolution.
