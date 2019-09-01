@@ -323,11 +323,11 @@ decplots[0].savefig('hb-hankel.svg', bbox_inches='tight')
 
 The results are positive: while this filtering process can certainly be improved, we have obtained a spatial-domain filter that closely-approximates the fractional-Laplacian frequency-domain operator needed by the texture-shading algorithm.
 
-![Low-pass-filtered version of our initial spatial-domain-created filter](lpf-hankel.svg)
+![Low-pass-filtered version of our initial spatial-domain-created filter](lpf-hankel.png)
 
 Above: low-pass-filtered version of our initial spatial-domain-created filter.
 
-![Halfbanded (decimated) version of our initial spatial-dmain-created filter: this meets the requirements of the original texture-shading algorithm](hb-hankel.svg)
+![Halfbanded (decimated) version of our initial spatial-dmain-created filter: this meets the requirements of the original texture-shading algorithm](hb-hankel.png)
 
 Above: halfbanded (decimated) version of our initial spatial-dmain-created filter: this meets the requirements of the original texture-shading algorithm.
 
