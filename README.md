@@ -178,6 +178,161 @@ for i in orig.png scaled.png; do convert -filter Mitchell -sampling-factor 1x1 -
 
 ## The approximation
 
+Is there any way to apply the fractional-Laplacian operator, which is expressed in the frequency-domain as $|\vec f|^α ⋅ F[x]$ for an input array $x$, that *doesn't* require a 2D Fourier transform of $x$? Recall that the Fourier transform is a unitary operator—that is, $F[x]$ can be seen as a matrix–vector product $\underline F ⋅ \underline x$, where the underlines represent a matrix or vector version of the operator or its input, and $\underline F$ is a unitary matrix (the complex-domain extension of an orthogonal matrix). This indicates that each element of the output of a Fourier transform is a function of each of the input elements (though because it can do this in $log(N)$ operations, instead of $N$, we call it the *fast* Fourier transform (FFT)). There doesn't seem to be a memory-local way to convert the array of elevations to the Fourier domain, since each frequency bin has contributions from each pixel in the elevation array.
+
+But we do know from linear systems theory that multiplication in the frequency domain is equivalent to convolution in the spatial domain. We can ask if there's any structure to the spatial-domain representation of the fractional-Laplacian $|\vec f|^α$, i.e., what is $F^{-1}[|\vec f|^α]$?
+
+Trawling through the Wikipedia I stumbled on [the Hankel transform and its relationship to the Fourier transform of circularly-symmetric functions](https://en.wikipedia.org/w/index.php?title=Hankel_transform&oldid=901300195#Relation_to_the_Fourier_transform_(circularly_symmetric_case)). Wikipedia notes that for a two-dimensional radial function $f(r)$, its two-dimensional Fourier transform $F(\vec k)$ is
+
+$$F(\vec k) = F(k) = 2π\int_0^{\infty} f(r) ⋅ J_0(k r) \cdot r ⋅ dr,$$
+where $J_0(⋅)$ is the Bessel function of the first kind of order 0. In our notation, if we represent the fractional-Laplacian operator as $l(\vec f) = l(f) = f^α$ ("l" for "Laplacian"), its Fourier transform is, according to [Wolfram Alpha](https://www.wolframalpha.com/input/?i=2*pi*Integrate%5Bf%5Ea+*+BesselJ%5B0%2C+k+*+f%5D+*+f%2C+f%2C+0%2C+m%5D),
+
+$$2π\int_0^m f ⋅ f^α J_0(f r) df = 2π \frac{m^{α + 2}}{α + 2} \cdot {}_{1}F_2([α / 2 + 1], [1, α / 2 + 2], -(r ⋅ m / 2)^2)$$
+where
+- $r$ is my variable for the radius in the spatial domain,
+- ${}_{1}F_2$ is a generalized hypergeometric function (not "the" hypergeometric function ${}_{2}F_1$!), and
+- where I left the upper limit of the integral as $m$ (for "max") because we have a bound on the extent of the frequency domain $\vec f = [f_x, f_y]'$, since $-π ≤ f_x < π$ radians per pixel, and same for $f_y$. (Recall this happens because we are working with a discrete-valued array of elevations $x$, so the Fourier transform is a discrete-time Fourier transform (DTFT) and is periodic every 2π radians per pixel.)
+
+> Odd sidebar. My little knowledge of mathematics is exhausted by wondering why, if I omit the 2π in the expression to Wolfram Alpha, it returns a much more complicated expression including Γ functions. Sympy similar story.
+
+The constant factors that accrete when working with Fourier transform pairs are usually incredibly tedious to keep track of, especially when evaluating them with the FFT. My normal practice is to get things working up to a constant factor and then see if I need to worry about that factor.
+
+So let us ask what the Fourier transform of an array containing evaluations of the radial function
+
+$$L(r) = {}_{1}F_2([α / 2 + 1], [1, α / 2 + 2], -(r ⋅ π / 2)^2).$$
+We use the maximum of the integral in the Hankel transform is $m=π$. Recall we use "l" and "L" for "Laplacian": $L(r)$ is the Fourier transform of the fractional-Laplacian $l(f) = |f|^α$.
+
+We do this in the code snippet below: we evaluate the above generalized hypergeometric function on a 200×200 array of radii. We assume the array's horizontal and vertical axes run from -100 to 99, i.e., assuming one pixel spacing for each element, compute each element's radius $r$, and evaluate $L(r)$. Then we look at its 2D FFT, which will be all-real because the input is symmetric. (Recall that in general, the Fourier transform of a real vector will contain complex entries but be conjugate-symmetric about the origin. The Fourier transform will contain zero imaginary components only if its input was symmetric about the origin.)
+
+```py
+# export math-hankel.py
+import numpy as np
+from mpmath import hyper
+import numpy.fft as fft
+import pylab as plt
+plt.style.use('ggplot')
+
+
+def spatial(r, a):
+  "Evaluate L(r), proportional to the Fourier transform of |f|**α"
+  return float(hyper((0.5 * a + 1,), (1.0, 0.5 * a + 2), -0.25 * (r * np.pi)**2))
+
+
+xmat, ymat = np.meshgrid(np.arange(-100, 100), np.arange(-100, 100))
+rmat = np.sqrt(xmat**2 + ymat**2)
+alpha = 0.8
+h = np.vectorize(lambda r: spatial(r, alpha))(rmat)
+```
+
+Above we use the fabulous [`mpmath`](http://mpmath.org/) package—a pure-Python arbitrary-precision package with extensive support for special functions, quadrature integration, linear algebra, etc., started by Fredrik Johansson in 2007 (when he was a teenager)—to compute the generalized hypergeometric function. Next, we'd like to visualize its Fourier transform—hopefully we see something that looks like $|f|^{0.8}$.
+
+```py
+# export math-hankel.py
+def F2cent(arr):
+  """Origin-centered 2D Fourier transform"""
+  return fft.fftshift(fft.fft2(fft.ifftshift(arr)))
+
+
+def plotF2cent(arr):
+  """Given an origin-centered 2D array, plot its 2D Fourier transform"""
+
+  def extents(f):
+    delta = f[1] - f[0]
+    return [f[0] - delta / 2, f[-1] + delta / 2]
+
+  h, w = arr.shape
+  x = np.ceil(np.arange(w) - w / 2) / w
+  y = np.ceil(np.arange(h) - h / 2) / h
+  fig, (sax, fax) = plt.subplots(1, 2)
+
+  sax.imshow(
+      arr,
+      aspect='equal',
+      interpolation='none',
+      extent=extents(x * w) + extents(y * h),
+      origin='lower')
+
+  fax.imshow(
+      np.real(F2cent(arr)),
+      aspect='equal',
+      interpolation='none',
+      extent=extents(x) + extents(y),
+      origin='lower')
+  sax.grid(False)
+  fax.grid(False)
+  sax.set_xlabel('pixel')
+  fax.set_xlabel('cycles/pixel')
+
+  return fig, sax, fax
+
+
+hplots = plotF2cent(h)
+hplots[1].set_title('L(r): spatial-domain')
+hplots[2].set_title('F[L(r)]: frequency-domain')
+plt.savefig('full-hankel.png', dpi=300, bbox_inches='tight')
+plt.savefig('full-hankel.svg', bbox_inches='tight')
+
+actual = np.real(F2cent(h))[100, :]
+f = np.ceil(np.arange(200) - 200 / 2) / 200
+expected = np.abs(f * 4)**alpha
+plt.figure()
+plt.plot(f, actual, '-', f, expected, '--', f, actual / expected, '.')
+plt.xlabel('f (cycles/pixel)')
+plt.legend(['actual', 'expected', 'actual/expected'])
+plt.title('Cut of actual F[L(r)] versus expected |4⋅f|^0.8')
+plt.savefig('full-hankel-actual-expected.png', dpi=300, bbox_inches='tight')
+plt.savefig('full-hankel-actual-expected.svg', bbox_inches='tight')
+```
+
+![An array of evaluating the expression we computed for the Fourier transform of the fractional-Laplacian operator, and it's actual Fourier transform](full-hankel.png)
+
+Above: an array of evaluating the expression we computed for the Fourier transform of the fractional-Laplacian operator, and it's actual Fourier transform.
+
+![Comparing the actual frequency response of our expression for the spatial-domain equivalent of the fractional-Laplacial, versus the expected frequency response, and their difference, which is approximately 1.024](full-hankel-actual-expected.svg)
+
+Above: Comparing the actual frequency response of our expression for the spatial-domain equivalent of the fractional-Laplacial, versus the expected frequency response, and their difference, which is approximately 1.024.
+
+This is a success! First, note that the 200×200 array on the left is close to zero: it has a bright center, and decays quickly as the radius from the center–origin grows. Next, note that its 2D Fourier transform is indeed what we had hoped: it sweeps out $∝|f|^{α=0.8}$ radially, for angular radii between 0 and π radians (normalized here to cycles instead of radians: the axes between ±0.5 cycles per pixel correspond to ±π radians per pixel). (The symbol "$∝$" is read as "proportional to".)
+
+The second plot above shows the near-constant ratio between the center-cut through the FFT of the spatial filter $L(r)$ and a scaled version of what we expect. Comparing $|4f|^α$, for $α=0.8$, to the cut through the FFT's output, we see a very-nearly-constant ratio of 1.024. Do note that the actual value inside the absolute value is irrelevant, and amounts only to scaling the texture-shaded output.
+
+**However**, we cannot use $L(r)$ as a spatial-domain equivalent of texture-shading because recall that the original algorithm requires
+
+$$y = F^{-1}[F[x] ⋅ |\vec f|^α],$$
+but $|\vec f|^α$ includes the *corners* of the frequency domain, not the radial pattern we see from the circular bull's-eye chart above, where the corners in the frequency domain get zero weight. We might use $L(r)$ nonetheless and accept the infidelity to the texture-shading algorithm, but we don't need to. If we decimate the spatial-domain filter $L(r)$ by two, then we effectively get the middle-half of its frequency response, which will be $∝|f|^α$ all the way out to its edges. The Scipy ecosystem provides several ways to [design halfband filters](https://docs.scipy.org/doc/scipy/reference/signal.html#filter-design). A simple example to demonstrate the idea will suffice: design an 8th order low-pass Butterworth filter and apply it along rows and columns of the spatial-domain filter, then downsample the result (throw away every other row/column):
+
+```py
+# export math-hankel.py
+import scipy.signal as sig
+lpf = sig.iirfilter(8, 0.5, btype='lowpass', ftype='butter')
+hiir = sig.filtfilt(*lpf, sig.filtfilt(*lpf, h, axis=0), axis=1)
+
+lpfplots = plotF2cent(hiir)
+decplots = plotF2cent(hiir[:-1:2, :-1:2])
+
+lpfplots[1].set_title('LPF[L(r)]')
+lpfplots[2].set_title('F[LPF[L(r)]]')
+lpfplots[0].savefig('lpf-hankel.png', dpi=300, bbox_inches='tight')
+lpfplots[0].savefig('lpf-hankel.svg', bbox_inches='tight')
+
+decplots[1].set_title('HB[L(r)]')
+decplots[2].set_title('F[HB[L(r)]]')
+decplots[0].savefig('hb-hankel.png', dpi=300, bbox_inches='tight')
+decplots[0].savefig('hb-hankel.svg', bbox_inches='tight')
+```
+
+The results are positive: while this filtering process can certainly be improved, we have obtained a spatial-domain filter that closely-approximates the fractional-Laplacian frequency-domain operator needed by the texture-shading algorithm.
+
+![Low-pass-filtered version of our initial spatial-domain-created filter](lpf-hankel.svg)
+
+Above: low-pass-filtered version of our initial spatial-domain-created filter.
+
+![Halfbanded (decimated) version of our initial spatial-dmain-created filter: this meets the requirements of the original texture-shading algorithm](hb-hankel.svg)
+
+Above: halfbanded (decimated) version of our initial spatial-dmain-created filter: this meets the requirements of the original texture-shading algorithm.
+
+## A more complete implementation of the approximation
+
 ```py
 # export hankel.py
 from mpmath import hyper
@@ -189,23 +344,10 @@ import functools
 from scipy.interpolate import interp1d
 
 
-def design(N=32, passbandWidth=0.03):
-  if N % 2 != 0:
-    raise ValueError('N must be even')
-  if N < 2:
-    raise ValueError('N must be > 1')
-  if not (passbandWidth > 0 and passbandWidth < 0.5):
-    raise ValueError('Need 0 < passbandWidth < 0.5')
-  bands = np.array([0., .25 - passbandWidth, .25 + passbandWidth, .5])
-  h = signal.remez(N + 1, bands, [1, 0], [1, 1])
-  h[abs(h) <= 1e-4] = 0.0
-  return h
-
-
 @functools.lru_cache(maxsize=None)
 def spatial(r, a, integralMax=np.pi):
   # Wolfram Alpha: `2*pi*Integrate[f^a * BesselJ[0, k * f] * f, f, 0, m]`
-  return float(hyper((a / 2.0 + 1,), (1.0, a / 2.0 + 2), -0.25 * (r * integralMax)**2))
+  return float(hyper((0.5 * a + 1,), (1.0, 0.5 * a + 2), -0.25 * (r * integralMax)**2))
 
 
 def vec(v):
@@ -228,25 +370,17 @@ def fullHankel(n, alpha, interpMethod=True, sampleSpacing=None):
   return hmat
 
 
-F2sym = lambda arr: fft.fftshift(fft.fft2(fft.ifftshift(arr)))
-
-
-def plotF2sym(arr):
-
-  def extents(f):
-    delta = f[1] - f[0]
-    return [f[0] - delta / 2, f[-1] + delta / 2]
-
-  h, w = arr.shape
-  x = np.ceil(np.arange(w) - w / 2) / w
-  y = np.ceil(np.arange(h) - h / 2) / h
-  plt.figure()
-  plt.imshow(
-      np.real(F2sym(arr)),
-      aspect='equal',
-      interpolation='none',
-      extent=extents(x) + extents(y),
-      origin='lower')
+def design(N=32, passbandWidth=0.03):
+  if N % 2 != 0:
+    raise ValueError('N must be even')
+  if N < 2:
+    raise ValueError('N must be > 1')
+  if not (passbandWidth > 0 and passbandWidth < 0.5):
+    raise ValueError('Need 0 < passbandWidth < 0.5')
+  bands = np.array([0., .25 - passbandWidth, .25 + passbandWidth, .5])
+  h = signal.remez(N + 1, bands, [1, 0], [1, 1])
+  h[abs(h) <= 1e-4] = 0.0
+  return h
 
 
 def halfband(hmat, taps=32):
@@ -280,49 +414,7 @@ def precomputeLoad(alpha, N, spacing):
     h = fun(r)
   np.savez(fname, x=r, y=h)
   return dict(r=r, h=h)
-
-
-if __name__ == '__main__':
-  import pylab as plt
-  plt.ion()
-
-  N = 500
-  hmat = fullHankel(N, 0.8)
-
-  plotF2sym(hmat)
-  plt.title('Frequency response of full Hankel filter')
-  plt.savefig('full-hankel.png', dpi=300)
-  plt.savefig('full-hankel.svg', dpi=300)
-
-  finalFilter = halfband(hmat, 128)
-  plotF2sym(finalFilter)
-  plt.title('Frequency response of half-banded Hankel filter')
-  plt.savefig('half-hankel.png', dpi=300)
-  plt.savefig('half-hankel.svg', dpi=300)
-
-  Hf = np.real(F2sym(hmat))
-  h, w = Hf.shape
-  x = np.ceil(np.arange(w) - w / 2) / w
-  x = x / .5 * 2
-  plt.figure()
-  plt.plot(x, Hf[N, :], x, x**.8)
-
-  H2f = np.real(F2sym(finalFilter))
-  h2, w2 = H2f.shape
-  x2 = np.ceil(np.arange(w2) - w2 / 2) / w2
-  x2 = x2 / .5 * 2
-  remmax = lambda x: x / np.max(x)
-  plt.figure()
-  plt.plot(x2, H2f[N // 2, :], x2,
-           np.abs(x2)**.8, x2,
-           remmax(np.abs(x2)**.8) * np.max(H2f[N // 2, :]))
 ```
-
-![Frequency response of full Hankel filter](full-hankel.png)
-
-![Frequency response of half-banded Hankel filter](half-hankel.png)
-
-The final plot above is the 2D filter that closely-approximates the full-resolution frequency-domain fractional-Laplacian operator.
 
 ```py
 # export hankel-demo.py
@@ -360,6 +452,11 @@ h = hankel.halfband(hankel.fullHankel(Nwidth, alpha), Nhalfband)
 texToFile(
     fftconvolve(arr, h, mode='same'),
     'hankel-texshade-alpha-{}-n-{}{}.png'.format(alpha, Nwidth, '-clip' if clip else ''))
+
+hFull = hankel.fullHankel(Nwidth, alpha)
+texToFile(
+    fftconvolve(arr, hFull, mode='same'),
+    'hankel-texshadeFullband-alpha-{}-n-{}{}.png'.format(alpha, Nwidth, '-clip' if clip else ''))
 ```
 
 We can compare the output of the original texture-shading algorithm:

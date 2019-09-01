@@ -34,3 +34,8 @@ h = hankel.halfband(hankel.fullHankel(Nwidth, alpha), Nhalfband)
 texToFile(
     fftconvolve(arr, h, mode='same'),
     'hankel-texshade-alpha-{}-n-{}{}.png'.format(alpha, Nwidth, '-clip' if clip else ''))
+
+hFull = hankel.fullHankel(Nwidth, alpha)
+texToFile(
+    fftconvolve(arr, hFull, mode='same'),
+    'hankel-texshadeFullband-alpha-{}-n-{}{}.png'.format(alpha, Nwidth, '-clip' if clip else ''))
