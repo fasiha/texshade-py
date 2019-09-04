@@ -2,20 +2,20 @@ import numpy as np
 
 
 def prepareh(h, nfft):
-  return np.conj(np.fft.rfft2(h, nfft))
+  return np.conj(np.fft.rfftn(h, nfft))
 
 
-def ols(x, hfftconj, range0, range1, nfft, nh):
-  start0 = range0[0]
-  start1 = range1[0]
-  length0 = min(max(range0) + 1, x.shape[0]) - start0
-  length1 = min(max(range1) + 1, x.shape[1]) - start1
-  length = np.array([length0, length1])
-  assert np.all(nfft >= length + nh - 1)
-  xpart = x[start0:(start0 + length0 + nh[0] - 1 + 1 - 1), start1:(start1 + length1 + nh[1] - 1 +
-                                                                   1 - 1)]
-  output = np.fft.irfft2(np.fft.rfft2(xpart, nfft) * hfftconj)
-  return output[:length0, :length1]
+def ols(x, hfftconj, starts, lengths, nfft, nh):
+  lengths = np.minimum(np.array(starts) + np.array(lengths), x.shape) - np.array(starts)
+  assert np.all(np.array(nfft) >= lengths + np.array(nh) - 1)
+  slices = tuple(
+      slice(start, start + length + nh - 1) for (start, length, nh) in zip(starts, lengths, nh))
+  xpart = x[slices]
+  output = np.fft.irfftn(np.fft.rfftn(xpart, nfft) * hfftconj)
+  return output[tuple(slice(0, s) for s in lengths)]
+  return output[tuple(
+      slice(0,
+            min(s.stop, shape) - s.start) for (shape, s) in zip(x.shape, slices))]
 
 
 if __name__ == '__main__':
@@ -27,18 +27,19 @@ if __name__ == '__main__':
   real = np.fft.irfft2(np.fft.rfft2(x, ngold) *
                        np.conj(np.fft.rfft2(h, ngold)))[:x.shape[0], :x.shape[1]]
   assert (np.allclose(real, gold))
-  
+
   nfft = [10, 12]
   hpre = prepareh(h, nfft)
-  
+
   ystep = 7
   xstep = 5
   col = []
   for ystart in range(0, x.shape[1], ystep):
     row = np.hstack([
-        ols(x, hpre, range(ystart, ystart + ystep), range(xstart, xstart + xstep), nfft, h.shape)
+        ols(x, hpre, [ystart, xstart], [ystep, xstep], nfft, h.shape)
         for xstart in range(0, x.shape[0], xstep)
     ])
     col.append(row)
   dirt = np.vstack(col)
   assert np.allclose(dirt, gold)
+  print('success')
