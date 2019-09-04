@@ -31,15 +31,15 @@ if __name__ == '__main__':
   nfft = [10, 12]
   hpre = prepareh(h, nfft)
 
-  ystep = 7
-  xstep = 5
-  col = []
-  for ystart in range(0, x.shape[1], ystep):
-    row = np.hstack([
-        ols(x, hpre, [ystart, xstart], [ystep, xstep], nfft, h.shape)
-        for xstart in range(0, x.shape[0], xstep)
-    ])
-    col.append(row)
-  dirt = np.vstack(col)
-  assert np.allclose(dirt, gold)
+  for xshift in range(8):
+    for yshift in range(8):
+      ystep, xstep = 1 + yshift, 1 + xshift
+      dirt = np.vstack([
+          np.hstack([
+              ols(x, hpre, [ystart, xstart], [ystep, xstep], nfft, h.shape)
+              for xstart in range(0, x.shape[0], xstep)
+          ])
+          for ystart in range(0, x.shape[1], ystep)
+      ])
+      assert np.allclose(dirt, gold)
   print('success')
