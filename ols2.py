@@ -25,18 +25,23 @@ if __name__ == '__main__':
                        np.conj(np.fft.rfft2(h, ngold)))[:x.shape[0], :x.shape[1]]
   assert (np.allclose(real, gold))
 
-  nfft = [10, 12]
-  hpre = prepareh(h, nfft)
+  from nextprod import nextprod
+  def test(maxlen):
+    nfft = [nextprod([2,3], x) for x in np.array(h.shape) + maxlen - 1]
+    print(nfft)
+    hpre = prepareh(h, nfft)
 
-  for xshift in range(8):
-    for yshift in range(8):
-      ystep, xstep = 1 + yshift, 1 + xshift
-      dirt = np.vstack([
-          np.hstack([
-              ols(x, hpre, [ystart, xstart], [ystep, xstep], nfft, h.shape)
-              for xstart in range(0, x.shape[0], xstep)
-          ])
-          for ystart in range(0, x.shape[1], ystep)
-      ])
-      assert np.allclose(dirt, gold)
+    for xlen0 in range(maxlen):
+      for ylen0 in range(maxlen):
+        ylen, xlen = 1 + ylen0, 1 + xlen0
+        dirt = np.vstack([
+            np.hstack([
+                ols(x, hpre, [ystart, xstart], [ylen, xlen], nfft, h.shape)
+                for xstart in range(0, x.shape[0], xlen)
+            ])
+            for ystart in range(0, x.shape[1], ylen)
+        ])
+        assert np.allclose(dirt, gold)
+  test(8)
+  test(5)
   print('success')
