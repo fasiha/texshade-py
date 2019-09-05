@@ -6,16 +6,13 @@ def prepareh(h, nfft):
 
 
 def ols(x, hfftconj, starts, lengths, nfft, nh):
-  lengths = np.minimum(np.array(starts) + np.array(lengths), x.shape) - np.array(starts)
+  lengths = np.minimum(np.array(lengths), x.shape - np.array(starts))
   assert np.all(np.array(nfft) >= lengths + np.array(nh) - 1)
   slices = tuple(
       slice(start, start + length + nh - 1) for (start, length, nh) in zip(starts, lengths, nh))
   xpart = x[slices]
   output = np.fft.irfftn(np.fft.rfftn(xpart, nfft) * hfftconj)
   return output[tuple(slice(0, s) for s in lengths)]
-  return output[tuple(
-      slice(0,
-            min(s.stop, shape) - s.start) for (shape, s) in zip(x.shape, slices))]
 
 
 if __name__ == '__main__':
