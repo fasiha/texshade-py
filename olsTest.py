@@ -1,14 +1,14 @@
 import numpy as np
 from scipy.signal import fftconvolve
-from ols import prepareh, ols
+from ols import prepareh, olsStep, ols
 from nextprod import nextprod
 
 
 def testOls():
 
   def testouter(nx, nh):
-    x = np.random.randint(-30, 30, size=(nx, nx))
-    h = np.random.randint(-20, 20, size=(nh, nh))
+    x = np.random.randint(-30, 30, size=(nx, nx)) + 1.0
+    h = np.random.randint(-20, 20, size=(nh, nh)) + 1.0
     ngold = np.array(x.shape) + np.array(h.shape) - 1
     gold = np.real(np.fft.ifft2(np.fft.fft2(x, ngold) *
                                 np.conj(np.fft.fft2(h, ngold))))[:x.shape[0], :x.shape[1]]
@@ -30,16 +30,25 @@ def testOls():
           ylen, xlen = 1 + ylen0, 1 + xlen0
           dirt = np.vstack([
               np.hstack([
-                  ols(x, hpre, [ystart, xstart], [ylen, xlen], nfft, h.shape)
+                  olsStep(x, hpre, [ystart, xstart], [ylen, xlen], nfft, h.shape)
                   for xstart in range(0, x.shape[0], xlen)
               ])
               for ystart in range(0, x.shape[1], ylen)
           ])
           assert np.allclose(dirt, gold)
 
+          dirt2 = ols(x, h, [ylen, xlen], nfft)
+          assert np.allclose(dirt2, gold)
+          dirt3 = ols(x, h, [ylen, xlen])
+          assert np.allclose(dirt3, gold)
+
     testinner(8)
     testinner(5)
 
-  for nx in [10, 11, 12, 13]:
-    for nh in [3, 4, 5, 6]:
+  for nx in [10, 11]:
+    for nh in [3, 4, 5]:
       testouter(nx, nh)
+
+
+if __name__ == '__main__':
+  testOls()
