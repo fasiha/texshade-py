@@ -17,15 +17,16 @@ def olsStep(x, hfftconj, starts, lengths, nfft, nh):
   return output[tuple(slice(0, s) for s in lengths)]
 
 
-def ols(x, h, size=None, nfft=None):
+def ols(x, h, size=None, nfft=None, out=None):
   assert len(x.shape) == len(h.shape)
   size = size or [4 * x for x in h.shape]
-  nfft = nfft or [int(nextprod([2, 3, 5, 7], size + nh - 1)) for size, nh in zip(size, h.shape)]
+  nfft = nfft or [nextprod([2, 3, 5, 7], size + nh - 1) for size, nh in zip(size, h.shape)]
   assert len(x.shape) == len(size)
   assert len(x.shape) == len(nfft)
 
   hpre = prepareh(h, nfft)
-  out = np.zeros(x.shape, dtype=x.dtype)
+  if out is None:
+    out = np.zeros(x.shape, dtype=x.dtype)
 
   for tup in arrayRange([0 for _ in out.shape], out.shape, size):
     out[tup] = olsStep(x, hpre, [s.start for s in tup], size, nfft, h.shape)

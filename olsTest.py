@@ -8,6 +8,7 @@ def testOls():
 
   def testouter(nx, nh):
     x = np.random.randint(-30, 30, size=(nx, nx)) + 1.0
+    np.save('x', x)
     h = np.random.randint(-20, 20, size=(nh, nh)) + 1.0
     ngold = np.array(x.shape) + np.array(h.shape) - 1
     gold = np.real(np.fft.ifft2(np.fft.fft2(x, ngold) *
@@ -42,11 +43,23 @@ def testOls():
           dirt3 = ols(x, h, [ylen, xlen])
           assert np.allclose(dirt3, gold)
 
+          # from tempfile import mkdtemp
+          # import os.path as path
+          # filename = path.join(mkdtemp(), 'x.dat')
+          memx = np.lib.format.open_memmap('x.npy')
+          memout = np.lib.format.open_memmap('out.npy', mode='w+', dtype=x.dtype, shape=x.shape)
+          dirtmem = ols(memx, h, [ylen, xlen], out=memout)
+          assert np.allclose(dirtmem, gold)
+          del memout
+          del memx
+
+          dirtmem2 = np.load('out.npy')
+          assert np.allclose(dirtmem2, gold)
+
     testinner(8)
-    testinner(5)
 
   for nx in [10, 11]:
-    for nh in [3, 4, 5]:
+    for nh in [3, 4]:
       testouter(nx, nh)
 
 
