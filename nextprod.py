@@ -12,7 +12,7 @@ from typing import List
 import math
 
 
-def nextpow(a: float, x: float):
+def nextpow(a: float, x: float) -> float:
   """The smallest `a^n` not less than `x`, where `n` is a non-negative integer.
   
   `a` must be greater than 1, and `x` must be greater than 0.
@@ -36,7 +36,7 @@ def nextpow(a: float, x: float):
   return p if p >= x else a**n
 
 
-def nextprod(a: List[int], x: int):
+def nextprod(a: List[int], x: int) -> int:
   """Next integer greater than or equal to `n` that can be written as ``\\prod k_i^{p_i}`` for integers
   ``p_1``, ``p_2``, etc.
   # Examples
@@ -72,4 +72,4 @@ def nextprod(a: List[int], x: int):
       while p < x:
         p *= a[0]
         v[0] *= a[0]
-  return mx[-1] if mx[-1] < best else best
+  return int(mx[-1] if mx[-1] < best else best)

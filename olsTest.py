@@ -60,5 +60,24 @@ def testOls():
       testouter(nx, nh)
 
 
+def test1d():
+
+  def testInner(nx, nh):
+    x = np.random.randint(-30, 30, size=nx) + 1.0
+    h = np.random.randint(-20, 20, size=nh) + 1.0
+    ngold = x.size + h.size - 1
+    gold = np.real(np.fft.ifft(np.fft.fft(x, ngold) * np.conj(np.fft.fft(h, ngold))))[:x.size]
+    real = np.fft.irfft(np.fft.rfft(x, ngold) * np.conj(np.fft.rfft(h, ngold)), ngold)[:x.size]
+    assert np.allclose(gold, real)
+    for size in [2, 3]:
+      dirt = ols(x, h, [size])
+      assert np.allclose(gold, dirt)
+
+  for nx in [20, 21]:
+    for nh in [9, 10, 17, 18]:
+      testInner(nx, nh)
+
+
 if __name__ == '__main__':
   testOls()
+  test1d()
