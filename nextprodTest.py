@@ -10,3 +10,8 @@ def testNexpow():
 
 def testNextprod():
   assert nextprod.nextprod([2, 3], 105) == 108
+
+
+if __name__ == '__main__':
+  testNexpow()
+  testNextprod()

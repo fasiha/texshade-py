@@ -43,9 +43,6 @@ def testOls():
           dirt3 = ols(x, h, [ylen, xlen])
           assert np.allclose(dirt3, gold)
 
-          # from tempfile import mkdtemp
-          # import os.path as path
-          # filename = path.join(mkdtemp(), 'x.dat')
           memx = np.lib.format.open_memmap('x.npy')
           memout = np.lib.format.open_memmap('out.npy', mode='w+', dtype=x.dtype, shape=x.shape)
           dirtmem = ols(memx, h, [ylen, xlen], out=memout)
