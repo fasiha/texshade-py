@@ -470,3 +470,45 @@ with that of the Hankel approximation:
 Both are very close. Toggling between them only reveals slight contrast differences due to the different levels obtained for the quantiles—these differences are likely caused by the artifacts at the edges.
 
 In the above demo code, we ask Scipy's [`fftconvolve`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.fftconvolve.html) to apply the spatial-domain filtering, which behind the scenes uses a full-sized FFT just like the original method. However, we can make this much more memory-efficient, while retaining its speed, by using the overlap-add (or overlap-save) technique of fast-convolution.
+
+## Overlap-save method for fast-convolution
+The textbook definition of convolving two signals in the spatial domain is a quadratic $O(N^2)$ operation. Since convolution in the spatial domain is mathematically equivalent to multiplication in the frequency domain, and the FFT is a log-linear $O(N \log N)$ operation, this is usually much faster—this is why we use `fftconvolve` above. The drawback of the FFT-based alternative to direct convolution is that it requires we run the FFT on the signals of interest—with a potentially prohibitive memory burden.
+
+The overlap-save method (and its closely-related sibling, the overlap-add method) allow us to convolve signals more intelligently: it still uses FFTs, so the overall theoretical runtime complexity remains log-linear, but it uses *many small* FFTs so memory consumption remains reasonable. I prefer overlap-save because it partitions the *output* array into non-overlapping segments that each step of the algorithm fills in (and which may be parallelized). Each step of the overlap-save algorithm reaches for segments of *input* that may overlap with other steps, but this overlap is read-only.
+
+> In contrast, overlap-add splits the *input* array into non-overlapping segments. Each step of that algorithm has to potentially modify previously-computed samples of the *output*, which makes parallelization much more nasty (requiring locks or careful orchestration of the sequence of steps).
+
+The overlap-save implementation I wrote is largely out of the scope of this texture-shading library, so let's just import it and show how we can use it, along with memory-mapped inputs and outputs to save memory.
+
+```py
+# export hankel-memmap.py
+import numpy as np
+import hankel
+import texshade
+import postprocess
+from ols import ols
+nextpow2 = lambda v: list(map(int, 2**np.ceil(np.log2(v))))
+
+fname = 'merged.tif.npy'
+arr = np.load(fname, mmap_mode='r')
+
+
+def texToFile(tex, fname):
+  minmax = np.quantile(tex.ravel(), [.01, .99])
+  scaled = postprocess.touint(tex, minmax[0], minmax[1], np.uint8)
+  postprocess.toPng(scaled, fname)
+
+
+alpha = 0.8
+
+Nwidth = 500
+Nhalfband = 128
+h = hankel.halfband(hankel.fullHankel(Nwidth, alpha), Nhalfband)
+
+tex = np.lib.format.open_memmap('mmap-tex.npy', mode='w+', dtype=np.float64, shape=arr.shape)
+print(tex.shape)
+ols(arr, h, size=[2000, 2000], out=tex)
+print(tex.shape)
+texToFile(tex, 'hankel-texshade-alpha-{}-n-{}-mmap.png'.format(alpha, Nwidth))
+```
+We lose the top-left 250 pixels (half of the Hankel filter) though!

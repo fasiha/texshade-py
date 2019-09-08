@@ -1,5 +1,5 @@
 """
-Multidimensional overlap-save method for fast-convolution.
+# Multidimensional overlap-save method for fast-convolution
 
 Features:
 
@@ -14,6 +14,8 @@ Features:
 The semantics of the convolution are as follows (the following is culled from
 the unit test):
 ```py
+import numpy as np
+
 # Generate a 100x100 signal array and a 10x10 filter array
 nx = 100
 nh = 10
@@ -27,6 +29,7 @@ expected = np.real(np.fft.ifft2(np.fft.fft2(x, ngold) *
 
 # Use overlap-save, computing the output in 6x5-sized chunks. Instead of one
 # huge FFT, we do a sequence of tiny ones
+from ols import ols
 actual = ols(x, h, [6, 5])
 
 # The two will match
