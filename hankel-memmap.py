@@ -2,10 +2,8 @@
 
 import numpy as np
 import hankel
-import texshade
 import postprocess
 from ols import ols
-nextpow2 = lambda v: list(map(int, 2**np.ceil(np.log2(v))))
 
 fname = 'merged.tif.npy'
 arr = np.load(fname, mmap_mode='r')

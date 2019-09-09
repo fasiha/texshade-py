@@ -10,17 +10,8 @@ def testOls():
     x = np.random.randint(-30, 30, size=(nx, nx)) + 1.0
     np.save('x', x)
     h = np.random.randint(-20, 20, size=(nh, nh)) + 1.0
-    ngold = np.array(x.shape) + np.array(h.shape) - 1
-    gold = np.real(np.fft.ifft2(np.fft.fft2(x, ngold) *
-                                np.conj(np.fft.fft2(h, ngold))))[:x.shape[0], :x.shape[1]]
-    real = np.fft.irfft2(np.fft.rfft2(x, ngold) * np.conj(np.fft.rfft2(h, ngold)),
-                         ngold)[:x.shape[0], :x.shape[1]]
 
-    assert (np.allclose(real, gold))
-
-    conv = fftconvolve(x, h[::-1, ::-1], 'same')
-    conv = np.roll(conv, [-(nh // 2)] * 2, [-1, -2])
-    assert (np.allclose(conv[:-(nh // 2), :-(nh // 2)], gold[:-(nh // 2), :-(nh // 2)]))
+    gold = fftconvolve(x, h, 'same')
 
     def testinner(maxlen):
       nfft = [nextprod([2, 3], x) for x in np.array(h.shape) + maxlen - 1]
@@ -65,10 +56,7 @@ def test1d():
   def testInner(nx, nh):
     x = np.random.randint(-30, 30, size=nx) + 1.0
     h = np.random.randint(-20, 20, size=nh) + 1.0
-    ngold = x.size + h.size - 1
-    gold = np.real(np.fft.ifft(np.fft.fft(x, ngold) * np.conj(np.fft.fft(h, ngold))))[:x.size]
-    real = np.fft.irfft(np.fft.rfft(x, ngold) * np.conj(np.fft.rfft(h, ngold)), ngold)[:x.size]
-    assert np.allclose(gold, real)
+    gold = fftconvolve(x, h, mode='same')
     for size in [2, 3]:
       dirt = ols(x, h, [size])
       assert np.allclose(gold, dirt)
@@ -79,5 +67,5 @@ def test1d():
 
 
 if __name__ == '__main__':
-  testOls()
   test1d()
+  testOls()

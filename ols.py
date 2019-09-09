@@ -1,5 +1,5 @@
 """
-# Multidimensional overlap-save method for fast-convolution
+# Fast-convolution via overlap-save: a partial drop-in replacement for scipy.signal.fftconvolve
 
 Features:
 
@@ -7,14 +7,18 @@ Features:
   - (Currently unsupported is convolving different-dimensional signals)
 - Memory-mapped input/outputs fully supported (and tested)
 - Relatively straightforward to paralellize each step of the algorithm
-- Real-only, but readily modifiable to complex (convert `rfft` to `fft`)
-- Equivalent to a `np.roll` of `scipy.signal.fftconvolve(mode='same')` (this is tested)
 - Extensively unit-tested
 
-The semantics of the convolution are as follows (the following is culled from
-the unit test):
+When it can be used as a drop-in replacement for `fftconvolve`:
+
+- when you have real inputs (complex support should be straightforward: replace `rfft` with `fft`)
+- when you call `fftconvolve` with `mode='same'` and `axes=None`
+- [See docs](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.fftconvolve.html)
+
+Example (culled from unit tests):
 ```py
 import numpy as np
+from scipy.signal import fftconvolve
 
 # Generate a 100x100 signal array and a 10x10 filter array
 nx = 100
@@ -22,31 +26,16 @@ nh = 10
 x = np.random.randint(-10, 10, size=(nx, nx)) + 1.0
 h = np.random.randint(-10, 10, size=(nh, nh)) + 1.0
 
-# Compute the linear convolution using the FFT, keep the first 100x100 samples
-ngold = np.array(x.shape) + np.array(h.shape) - 1
-expected = np.real(np.fft.ifft2(np.fft.fft2(x, ngold) *
-                                np.conj(np.fft.fft2(h, ngold))))[:x.shape[0], :x.shape[1]]
+# Compute the linear convolution using the FFT, keeping the center 100x100 samples
+expected = fftconvolve(x, h, mode='same')
 
-# Use overlap-save, computing the output in 6x5-sized chunks. Instead of one
-# huge FFT, we do a sequence of tiny ones
+# Use overlap-save, computing the output in 6x5-sized chunks. Instead of one huge FFT, we do a
+# several tiny ones
 from ols import ols
 actual = ols(x, h, [6, 5])
 
 # The two will match
 assert np.allclose(expected, actual)
-```
-
-Therefore, if you're computing fast-convolution as an IFFT of the product of FFTs, this module can
-function as a drop-in replacement.
-
-If you're using `scipy.signal.fftconvolve()` with `mode='same'`, then you have to roll the output
-of this module to match what you have. You'll also have to throw away some data at the end due to
-edge effects. Again culled from the unit-test:
-```py
-from scipy.signal import fftconvolve
-conv = fftconvolve(x, h[::-1, ::-1], mode='same')
-conv = np.roll(conv, [-(nh // 2)] * 2, [-1, -2])
-assert np.allclose(conv[:-(nh // 2), :-(nh // 2)], gold[:-(nh // 2), :-(nh // 2)])
 ```
 """
 
@@ -60,10 +49,10 @@ def prepareh(h, nfft: List[int]):
   """Pre-process a filter array
   
   Given a real filter array `h` and the length of the FFT `nfft`,
-  returns the conjugated and FFT'd array. Needs to be computed
+  returns the frequency-domain array. Needs to be computed
   only once before all steps of the overlap-save algorithm run.
   """
-  return np.conj(np.fft.rfftn(h, nfft))
+  return np.conj(np.fft.rfftn(np.flip(h), nfft))
 
 
 def olsStep(x, hfftconj, starts: List[int], lengths: List[int], nfft: List[int], nh: List[int]):
@@ -88,9 +77,22 @@ def olsStep(x, hfftconj, starts: List[int], lengths: List[int], nfft: List[int],
   assert len(x.shape) == len(nfft) and len(x.shape) == len(nh)
   lengths = np.minimum(np.array(lengths), x.shape - np.array(starts))
   assert np.all(np.array(nfft) >= lengths + np.array(nh) - 1)
+  border = np.array(nh) // 2
   slices = tuple(
-      slice(start, start + length + nh - 1) for (start, length, nh) in zip(starts, lengths, nh))
-  xpart = x[slices]
+      slice(start - border, start + length + nh - 1 - border)
+      for (start, length, nh, border) in zip(starts, lengths, nh, border))
+  if all(map(lambda s: s.start >= 0, slices)):
+    xpart = x[slices]
+  else:
+    xpart = np.zeros(np.array(lengths) + np.array(nh) - 1, dtype=x.dtype)
+    # We want `x[slices]` to get zeros for any negative indexes it encounters
+    full = tuple(slice(max(s.start, 0), s.stop) for s in slices)
+    xview = x[full]
+    # We now have the non-zero portion of the input. We must pad top/left with zeros
+    chunk = tuple(
+        slice(0 if s.start >= 0 else -s.start, shape if s.start >= 0 else -s.start + shape)
+        for s, shape in zip(slices, xview.shape))
+    xpart[chunk] = xview
   output = np.fft.irfftn(np.fft.rfftn(xpart, nfft) * hfftconj, nfft)
   return output[tuple(slice(0, s) for s in lengths)]
 
