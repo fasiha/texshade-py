@@ -12,17 +12,17 @@ The mathematical trick, in a nutshell, is to use the Hankel transform to find a 
 
 ## The texture-shading algorithm
 
-The original texture-shading algorithm takes a 2D array of elevations, call it $x$, and computes the texture-shaded elevation map,
+The original texture-shading algorithm takes a 2D array of elevations, call it \\(x\\), and computes the texture-shaded elevation map,
 
 $$y = F^{-1}[F[x] ⋅ |\vec f|^α],$$
 
 where
-- $F[\cdot]$ is the 2D Fourier transform operator and $F^{-1}[\cdot]$ its inverse
-- $\vec f = [f_x, f_y]'$ the 2D vector of Fourier coordinates, so $|\vec f|^α=(f_x^2 + f_y^2)^{α/2}$
-- $()'$ indicates matrix or vector transpose
-- $0<α≤1$, the "fraction" in the fractional-Laplacian (though Brown gives examples of $α≤2$!).
+- \\(F[\cdot]\\) is the 2D Fourier transform operator and \\(F^{-1}[\cdot]\\) its inverse
+- \\(\vec f = [f_x, f_y]'\\) the 2D vector of Fourier coordinates, so \\(|\vec f|^α=(f_x^2 + f_y^2)^{α/2}\\)
+- \\(()'\\) indicates matrix or vector transpose
+- \\(0<α≤1\\), the "fraction" in the fractional-Laplacian (though Brown gives examples of \\(α≤2\\)!).
 
-While many details of the algorithm have yet to be specified, the output array $y$ can be made to have the same size as the input $x$.
+While many details of the algorithm have yet to be specified, the output array \\(y\\) can be made to have the same size as the input \\(x\\).
 
 Let's implement this in Python.
 
@@ -137,7 +137,6 @@ np.save(fname + '.tex', tex)
 ```py
 # export postprocess.py
 import numpy as np
-from PIL import Image
 
 
 def touint(x, cmin, cmax, dtype=np.uint8):
@@ -152,6 +151,7 @@ def touint(x, cmin, cmax, dtype=np.uint8):
 
 
 def toPng(scaled, fname):
+  from PIL import Image
   newimage = Image.new('L', (scaled.shape[1], scaled.shape[0]))  # type, (width, height)
   newimage.putdata(scaled.ravel())
   newimage.save(fname)
@@ -167,7 +167,7 @@ if __name__ == '__main__':
 ```
 
 ```
-for i in orig.png scaled.png; do convert -filter Mitchell -sampling-factor 1x1 -quality 90 -resize 2048 $i $i.small.png; done
+for i in orig.png scaled.png; do convert -filter Mitchell -sampling-factor 1x1 -quality 90 -resize 2048 \\(i \\)i.small.png; done
 ```
 
 ### Original
@@ -178,20 +178,20 @@ for i in orig.png scaled.png; do convert -filter Mitchell -sampling-factor 1x1 -
 
 ## The approximation
 
-Is there any way to apply the fractional-Laplacian operator, which is expressed in the frequency-domain as $|\vec f|^α ⋅ F[x]$ for an input array $x$, that *doesn't* require a 2D Fourier transform of $x$? Recall that the Fourier transform is a unitary operator—that is, $F[x]$ can be seen as a matrix–vector product $\underline F ⋅ \underline x$, where the underlines represent a matrix or vector version of the operator or its input, and $\underline F$ is a unitary matrix (the complex-domain extension of an orthogonal matrix). This indicates that each element of the output of a Fourier transform is a function of each of the input elements (though because it can do this in $log(N)$ operations, instead of $N$, we call it the *fast* Fourier transform (FFT)). There doesn't seem to be a memory-local way to convert the array of elevations to the Fourier domain, since each frequency bin has contributions from each pixel in the elevation array.
+Is there any way to apply the fractional-Laplacian operator, which is expressed in the frequency-domain as \\(|\vec f|^α ⋅ F[x]\\) for an input array \\(x\\), that *doesn't* require a 2D Fourier transform of \\(x\\)? Recall that the Fourier transform is a unitary operator—that is, \\(F[x]\\) can be seen as a matrix–vector product \\(\underline F ⋅ \underline x\\), where the underlines represent a matrix or vector version of the operator or its input, and \\(\underline F\\) is a unitary matrix (the complex-domain extension of an orthogonal matrix). This indicates that each element of the output of a Fourier transform is a function of each of the input elements (though because it can do this in \\(log(N)\\) operations, instead of \\(N\\), we call it the *fast* Fourier transform (FFT)). There doesn't seem to be a memory-local way to convert the array of elevations to the Fourier domain, since each frequency bin has contributions from each pixel in the elevation array.
 
-But we do know from linear systems theory that multiplication in the frequency domain is equivalent to convolution in the spatial domain. We can ask if there's any structure to the spatial-domain representation of the fractional-Laplacian $|\vec f|^α$, i.e., what is $F^{-1}[|\vec f|^α]$?
+But we do know from linear systems theory that multiplication in the frequency domain is equivalent to convolution in the spatial domain. We can ask if there's any structure to the spatial-domain representation of the fractional-Laplacian \\(|\vec f|^α\\), i.e., what is \\(F^{-1}[|\vec f|^α]\\)?
 
-Trawling through the Wikipedia I stumbled on [the Hankel transform and its relationship to the Fourier transform of circularly-symmetric functions](https://en.wikipedia.org/w/index.php?title=Hankel_transform&oldid=901300195#Relation_to_the_Fourier_transform_(circularly_symmetric_case)). Wikipedia notes that for a two-dimensional radial function $f(r)$, its two-dimensional Fourier transform $F(\vec k)$ is
+Trawling through the Wikipedia I stumbled on [the Hankel transform and its relationship to the Fourier transform of circularly-symmetric functions](https://en.wikipedia.org/w/index.php?title=Hankel_transform&oldid=901300195#Relation_to_the_Fourier_transform_(circularly_symmetric_case)). Wikipedia notes that for a two-dimensional radial function \\(f(r)\\), its two-dimensional Fourier transform \\(F(\vec k)\\) is
 
 $$F(\vec k) = F(k) = 2π\int_0^{\infty} f(r) ⋅ J_0(k r) \cdot r ⋅ dr,$$
-where $J_0(⋅)$ is the Bessel function of the first kind of order 0. In our notation, if we represent the fractional-Laplacian operator as $l(\vec f) = l(f) = f^α$ ("l" for "Laplacian"), its Fourier transform is, according to [Wolfram Alpha](https://www.wolframalpha.com/input/?i=2*pi*Integrate%5Bf%5Ea+*+BesselJ%5B0%2C+k+*+f%5D+*+f%2C+f%2C+0%2C+m%5D),
+where \\(J_0(⋅)\\) is the Bessel function of the first kind of order 0. In our notation, if we represent the fractional-Laplacian operator as \\(l(\vec f) = l(f) = f^α\\) ("l" for "Laplacian"), its Fourier transform is, according to [Wolfram Alpha](https://www.wolframalpha.com/input/?i=2*pi*Integrate%5Bf%5Ea+*+BesselJ%5B0%2C+k+*+f%5D+*+f%2C+f%2C+0%2C+m%5D),
 
 $$2π\int_0^m f ⋅ f^α J_0(f r) df = 2π \frac{m^{α + 2}}{α + 2} \cdot {}_{1}F_2([α / 2 + 1], [1, α / 2 + 2], -(r ⋅ m / 2)^2)$$
 where
-- $r$ is my variable for the radius in the spatial domain,
-- ${}_{1}F_2$ is a generalized hypergeometric function (not "the" hypergeometric function ${}_{2}F_1$!), and
-- where I left the upper limit of the integral as $m$ (for "max") because we have a bound on the extent of the frequency domain $\vec f = [f_x, f_y]'$, since $-π ≤ f_x < π$ radians per pixel, and same for $f_y$. (Recall this happens because we are working with a discrete-valued array of elevations $x$, so the Fourier transform is a discrete-time Fourier transform (DTFT) and is periodic every 2π radians per pixel.)
+- \\(r\\) is my variable for the radius in the spatial domain,
+- \\(1F2\\) is a generalized hypergeometric function (not "the" hypergeometric function \\(2F1\\)!), and
+- where I left the upper limit of the integral as \\(m\\) (for "max") because we have a bound on the extent of the frequency domain \\(\vec f = [f_x, f_y]'\\), since \\(-π ≤ f_x < π\\) radians per pixel, and same for \\(f_y\\). (Recall this happens because we are working with a discrete-valued array of elevations \\(x\\), so the Fourier transform is a discrete-time Fourier transform (DTFT) and is periodic every 2π radians per pixel.)
 
 > Odd sidebar. My little knowledge of mathematics is exhausted by wondering why, if I omit the 2π in the expression to Wolfram Alpha, it returns a much more complicated expression including Γ functions. Sympy similar story.
 
@@ -200,9 +200,9 @@ The constant factors that accrete when working with Fourier transform pairs are 
 So let us ask what the Fourier transform of an array containing evaluations of the radial function
 
 $$L(r) = {}_{1}F_2([α / 2 + 1], [1, α / 2 + 2], -(r ⋅ π / 2)^2).$$
-We use the maximum of the integral in the Hankel transform is $m=π$. Recall we use "l" and "L" for "Laplacian": $L(r)$ is the Fourier transform of the fractional-Laplacian $l(f) = |f|^α$.
+We use the maximum of the integral in the Hankel transform is \\(m=π\\). Recall we use "l" and "L" for "Laplacian": \\(L(r)\\) is the Fourier transform of the fractional-Laplacian \\(l(f) = |f|^α\\).
 
-We do this in the code snippet below: we evaluate the above generalized hypergeometric function on a 200×200 array of radii. We assume the array's horizontal and vertical axes run from -100 to 99, i.e., assuming one pixel spacing for each element, compute each element's radius $r$, and evaluate $L(r)$. Then we look at its 2D FFT, which will be all-real because the input is symmetric. (Recall that in general, the Fourier transform of a real vector will contain complex entries but be conjugate-symmetric about the origin. The Fourier transform will contain zero imaginary components only if its input was symmetric about the origin.)
+We do this in the code snippet below: we evaluate the above generalized hypergeometric function on a 200×200 array of radii. We assume the array's horizontal and vertical axes run from -100 to 99, i.e., assuming one pixel spacing for each element, compute each element's radius \\(r\\), and evaluate \\(L(r)\\). Then we look at its 2D FFT, which will be all-real because the input is symmetric. (Recall that in general, the Fourier transform of a real vector will contain complex entries but be conjugate-symmetric about the origin. The Fourier transform will contain zero imaginary components only if its input was symmetric about the origin.)
 
 ```py
 # export math-hankel.py
@@ -224,7 +224,7 @@ alpha = 0.8
 h = np.vectorize(lambda r: spatial(r, alpha))(rmat)
 ```
 
-Above we use the fabulous [`mpmath`](http://mpmath.org/) package—a pure-Python arbitrary-precision package with extensive support for special functions, quadrature integration, linear algebra, etc., started by Fredrik Johansson in 2007 (when he was a teenager)—to compute the generalized hypergeometric function. Next, we'd like to visualize its Fourier transform—hopefully we see something that looks like $|f|^{0.8}$.
+Above we use the fabulous [`mpmath`](http://mpmath.org/) package—a pure-Python arbitrary-precision package with extensive support for special functions, quadrature integration, linear algebra, etc., started by Fredrik Johansson in 2007 (when he was a teenager)—to compute the generalized hypergeometric function. Next, we'd like to visualize its Fourier transform—hopefully we see something that looks like \\(|f|^{0.8}\\).
 
 ```py
 # export math-hankel.py
@@ -292,14 +292,14 @@ Above: an array of evaluating the expression we computed for the Fourier transfo
 
 Above: Comparing the actual frequency response of our expression for the spatial-domain equivalent of the fractional-Laplacial, versus the expected frequency response, and their difference, which is approximately 1.024.
 
-This is a success! First, note that the 200×200 array on the left is close to zero: it has a bright center, and decays quickly as the radius from the center–origin grows. Next, note that its 2D Fourier transform is indeed what we had hoped: it sweeps out $∝|f|^{α=0.8}$ radially, for angular radii between 0 and π radians (normalized here to cycles instead of radians: the axes between ±0.5 cycles per pixel correspond to ±π radians per pixel). (The symbol "$∝$" is read as "proportional to".)
+This is a success! First, note that the 200×200 array on the left is close to zero: it has a bright center, and decays quickly as the radius from the center–origin grows. Next, note that its 2D Fourier transform is indeed what we had hoped: it sweeps out \\(∝|f|^{α=0.8}\\) radially, for angular radii between 0 and π radians (normalized here to cycles instead of radians: the axes between ±0.5 cycles per pixel correspond to ±π radians per pixel). (The symbol "\\(∝\\)" is read as "proportional to".)
 
-The second plot above shows the near-constant ratio between the center-cut through the FFT of the spatial filter $L(r)$ and a scaled version of what we expect. Comparing $|4f|^α$, for $α=0.8$, to the cut through the FFT's output, we see a very-nearly-constant ratio of 1.024. Do note that the actual value inside the absolute value is irrelevant, and amounts only to scaling the texture-shaded output.
+The second plot above shows the near-constant ratio between the center-cut through the FFT of the spatial filter \\(L(r)\\) and a scaled version of what we expect. Comparing \\(|4f|^α\\), for \\(α=0.8\\), to the cut through the FFT's output, we see a very-nearly-constant ratio of 1.024. Do note that the actual value inside the absolute value is irrelevant, and amounts only to scaling the texture-shaded output.
 
-**However**, we cannot use $L(r)$ as a spatial-domain equivalent of texture-shading because recall that the original algorithm requires
+**However**, we cannot use \\(L(r)\\) as a spatial-domain equivalent of texture-shading because recall that the original algorithm requires
 
 $$y = F^{-1}[F[x] ⋅ |\vec f|^α],$$
-but $|\vec f|^α$ includes the *corners* of the frequency domain, not the radial pattern we see from the circular bull's-eye chart above, where the corners in the frequency domain get zero weight. We might use $L(r)$ nonetheless and accept the infidelity to the texture-shading algorithm, but we don't need to. If we decimate the spatial-domain filter $L(r)$ by two, then we effectively get the middle-half of its frequency response, which will be $∝|f|^α$ all the way out to its edges. The Scipy ecosystem provides several ways to [design halfband filters](https://docs.scipy.org/doc/scipy/reference/signal.html#filter-design). A simple example to demonstrate the idea will suffice: design an 8th order low-pass Butterworth filter and apply it along rows and columns of the spatial-domain filter, then downsample the result (throw away every other row/column):
+but \\(|\vec f|^α\\) includes the *corners* of the frequency domain, not the radial pattern we see from the circular bull's-eye chart above, where the corners in the frequency domain get zero weight. We might use \\(L(r)\\) nonetheless and accept the infidelity to the texture-shading algorithm, but we don't need to. If we decimate the spatial-domain filter \\(L(r)\\) by two, then we effectively get the middle-half of its frequency response, which will be \\(∝|f|^α\\) all the way out to its edges. The Scipy ecosystem provides several ways to [design halfband filters](https://docs.scipy.org/doc/scipy/reference/signal.html#filter-design). A simple example to demonstrate the idea will suffice: design an 8th order low-pass Butterworth filter and apply it along rows and columns of the spatial-domain filter, then downsample the result (throw away every other row/column):
 
 ```py
 # export math-hankel.py
@@ -472,7 +472,7 @@ Both are very close. Toggling between them only reveals slight contrast differen
 In the above demo code, we ask Scipy's [`fftconvolve`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.fftconvolve.html) to apply the spatial-domain filtering, which behind the scenes uses a full-sized FFT just like the original method. However, we can make this much more memory-efficient, while retaining its speed, by using the overlap-add (or overlap-save) technique of fast-convolution.
 
 ## Overlap-save method for fast-convolution
-The textbook definition of convolving two signals in the spatial domain is a quadratic $O(N^2)$ operation. Since convolution in the spatial domain is mathematically equivalent to multiplication in the frequency domain, and the FFT is a log-linear $O(N \log N)$ operation, this is usually much faster—this is why we use `fftconvolve` above. The drawback of the FFT-based alternative to direct convolution is that it requires we run the FFT on the signals of interest—with a potentially prohibitive memory burden.
+The textbook definition of convolving two signals in the spatial domain is a quadratic \\(O(N^2)\\) operation. Since convolution in the spatial domain is mathematically equivalent to multiplication in the frequency domain, and the FFT is a log-linear \\(O(N \log N)\\) operation, this is usually much faster—this is why we use `fftconvolve` above. The drawback of the FFT-based alternative to direct convolution is that it requires we run the FFT on the signals of interest—with a potentially prohibitive memory burden.
 
 The overlap-save method (and its closely-related sibling, the overlap-add method) allow us to convolve signals more intelligently: it still uses FFTs, so the overall theoretical runtime complexity remains log-linear, but it uses *many small* FFTs so memory consumption remains reasonable. I prefer overlap-save because it partitions the *output* array into non-overlapping segments that each step of the algorithm fills in (and which may be parallelized). Each step of the overlap-save algorithm reaches for segments of *input* that may overlap with other steps, but this overlap is read-only.
 
@@ -504,9 +504,7 @@ Nhalfband = 128
 h = hankel.halfband(hankel.fullHankel(Nwidth, alpha), Nhalfband)
 
 tex = np.lib.format.open_memmap('mmap-tex.npy', mode='w+', dtype=np.float64, shape=arr.shape)
-print(tex.shape)
 ols(arr, h, size=[2000, 2000], out=tex)
-print(tex.shape)
 texToFile(tex, 'hankel-texshade-alpha-{}-n-{}-mmap.png'.format(alpha, Nwidth))
 ```
 

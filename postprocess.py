@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-from PIL import Image
 
 
 def touint(x, cmin, cmax, dtype=np.uint8):
@@ -16,6 +15,7 @@ def touint(x, cmin, cmax, dtype=np.uint8):
 
 
 def toPng(scaled, fname):
+  from PIL import Image
   newimage = Image.new('L', (scaled.shape[1], scaled.shape[0]))  # type, (width, height)
   newimage.putdata(scaled.ravel())
   newimage.save(fname)
