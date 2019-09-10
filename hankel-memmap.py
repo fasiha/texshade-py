@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import hankel
+from texshade import halfHankel
 import postprocess
 from ols import ols
 
@@ -19,7 +19,7 @@ alpha = 0.8
 
 Nwidth = 500
 Nhalfband = 128
-h = hankel.halfband(hankel.fullHankel(Nwidth, alpha), Nhalfband)
+h = halfHankel(Nwidth, alpha, hbTaps=Nhalfband)
 
 tex = np.lib.format.open_memmap('mmap-tex.npy', mode='w+', dtype=np.float64, shape=arr.shape)
 ols(arr, h, size=[2000, 2000], out=tex)

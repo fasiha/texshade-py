@@ -6,5 +6,5 @@ fname = 'merged.tif.npy'
 
 arr = np.load(fname)
 print(arr)
-tex = texshade.texshade(arr, 0.8)
+tex = texshade.texshadeFFT(arr, 0.8)
 np.save(fname + '.tex', tex)

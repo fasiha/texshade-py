@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import hankel
 import texshade
 import postprocess
 from scipy.signal import fftconvolve
@@ -24,18 +23,20 @@ def texToFile(tex, fname):
 alpha = 0.8
 
 texToFile(
-    texshade.texshade(arr, alpha),
+    texshade.texshadeFFT(arr, alpha),
     'orig-texshade-alpha-{}{}.png'.format(alpha, '-clip' if clip else ''))
 
 Nwidth = 500
 Nhalfband = 128
 
-h = hankel.halfband(hankel.fullHankel(Nwidth, alpha), Nhalfband)
+h = texshade.halfHankel(Nwidth, alpha, hbTaps=Nhalfband)
+print('halfbanded', h.shape)
 texToFile(
     fftconvolve(arr, h, mode='same'),
     'hankel-texshade-alpha-{}-n-{}{}.png'.format(alpha, Nwidth, '-clip' if clip else ''))
 
-hFull = hankel.fullHankel(Nwidth, alpha)
+hFull = texshade.hankel.fullHankel(Nwidth, alpha)
+print('non-halfbanded', hFull.shape)
 texToFile(
     fftconvolve(arr, hFull, mode='same'),
     'hankel-texshadeFullband-alpha-{}-n-{}{}.png'.format(alpha, Nwidth, '-clip' if clip else ''))

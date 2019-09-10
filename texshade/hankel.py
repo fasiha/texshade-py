@@ -35,7 +35,7 @@ def fullHankel(n, alpha, interpMethod=True, sampleSpacing=None):
   return hmat
 
 
-def design(N=32, passbandWidth=0.03):
+def designHalfband(N, passbandWidth):
   if N % 2 != 0:
     raise ValueError('N must be even')
   if N < 2:
@@ -48,13 +48,25 @@ def design(N=32, passbandWidth=0.03):
   return h
 
 
-def halfband(hmat, taps=32):
-  hbFilter = design(taps)
+def halfband(hmat, taps=128, passbandWidth=0.03):
+  hbFilter = designHalfband(taps, passbandWidth)
   doubleFilter = convolve2d(
       convolve2d(hmat, vec(hbFilter), mode='same'), vec(hbFilter).T, mode='same')
   n = hmat.shape[0]
   finalFilter = doubleFilter[:-1:2, :-1:2] if n % 4 == 0 else doubleFilter[1:-1:2, 1:-1:2]
   return finalFilter
+
+
+def halfHankel(nDiameter,
+               alpha,
+               interpMethod=True,
+               sampleSpacing=None,
+               hbTaps=128,
+               hbPassbandWidth=0.03):
+  return halfband(
+      fullHankel(nDiameter, alpha, interpMethod=interpMethod, sampleSpacing=sampleSpacing),
+      taps=hbTaps,
+      passbandWidth=hbPassbandWidth)
 
 
 def precomputeLoad(alpha, N, spacing):

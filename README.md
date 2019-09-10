@@ -130,7 +130,7 @@ fname = 'merged.tif.npy'
 
 arr = np.load(fname)
 print(arr)
-tex = texshade.texshade(arr, 0.8)
+tex = texshade.texshadeFFT(arr, 0.8)
 np.save(fname + '.tex', tex)
 ```
 
@@ -334,7 +334,7 @@ Above: halfbanded (decimated) version of our initial spatial-dmain-created filte
 ## A more complete implementation of the approximation
 
 ```py
-# export hankel.py
+# export texshade/hankel.py
 from mpmath import hyper
 import numpy as np
 from scipy import signal
@@ -370,7 +370,7 @@ def fullHankel(n, alpha, interpMethod=True, sampleSpacing=None):
   return hmat
 
 
-def design(N=32, passbandWidth=0.03):
+def designHalfband(N, passbandWidth):
   if N % 2 != 0:
     raise ValueError('N must be even')
   if N < 2:
@@ -383,13 +383,25 @@ def design(N=32, passbandWidth=0.03):
   return h
 
 
-def halfband(hmat, taps=32):
-  hbFilter = design(taps)
+def halfband(hmat, taps=128, passbandWidth=0.03):
+  hbFilter = designHalfband(taps, passbandWidth)
   doubleFilter = convolve2d(
       convolve2d(hmat, vec(hbFilter), mode='same'), vec(hbFilter).T, mode='same')
   n = hmat.shape[0]
   finalFilter = doubleFilter[:-1:2, :-1:2] if n % 4 == 0 else doubleFilter[1:-1:2, 1:-1:2]
   return finalFilter
+
+
+def halfHankel(nDiameter,
+               alpha,
+               interpMethod=True,
+               sampleSpacing=None,
+               hbTaps=128,
+               hbPassbandWidth=0.03):
+  return halfband(
+      fullHankel(nDiameter, alpha, interpMethod=interpMethod, sampleSpacing=sampleSpacing),
+      taps=hbTaps,
+      passbandWidth=hbPassbandWidth)
 
 
 def precomputeLoad(alpha, N, spacing):
@@ -419,7 +431,6 @@ def precomputeLoad(alpha, N, spacing):
 ```py
 # export hankel-demo.py
 import numpy as np
-import hankel
 import texshade
 import postprocess
 from scipy.signal import fftconvolve
@@ -442,18 +453,20 @@ def texToFile(tex, fname):
 alpha = 0.8
 
 texToFile(
-    texshade.texshade(arr, alpha),
+    texshade.texshadeFFT(arr, alpha),
     'orig-texshade-alpha-{}{}.png'.format(alpha, '-clip' if clip else ''))
 
 Nwidth = 500
 Nhalfband = 128
 
-h = hankel.halfband(hankel.fullHankel(Nwidth, alpha), Nhalfband)
+h = texshade.halfHankel(Nwidth, alpha, hbTaps=Nhalfband)
+print('halfbanded', h.shape)
 texToFile(
     fftconvolve(arr, h, mode='same'),
     'hankel-texshade-alpha-{}-n-{}{}.png'.format(alpha, Nwidth, '-clip' if clip else ''))
 
-hFull = hankel.fullHankel(Nwidth, alpha)
+hFull = texshade.hankel.fullHankel(Nwidth, alpha)
+print('non-halfbanded', hFull.shape)
 texToFile(
     fftconvolve(arr, hFull, mode='same'),
     'hankel-texshadeFullband-alpha-{}-n-{}{}.png'.format(alpha, Nwidth, '-clip' if clip else ''))
@@ -483,7 +496,7 @@ The overlap-save implementation I wrote is largely out of the scope of this text
 ```py
 # export hankel-memmap.py
 import numpy as np
-import hankel
+from texshade import halfHankel
 import postprocess
 from ols import ols
 
@@ -501,7 +514,7 @@ alpha = 0.8
 
 Nwidth = 500
 Nhalfband = 128
-h = hankel.halfband(hankel.fullHankel(Nwidth, alpha), Nhalfband)
+h = halfHankel(Nwidth, alpha, hbTaps=Nhalfband)
 
 tex = np.lib.format.open_memmap('mmap-tex.npy', mode='w+', dtype=np.float64, shape=arr.shape)
 ols(arr, h, size=[2000, 2000], out=tex)
