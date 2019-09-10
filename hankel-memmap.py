@@ -22,7 +22,5 @@ Nhalfband = 128
 h = hankel.halfband(hankel.fullHankel(Nwidth, alpha), Nhalfband)
 
 tex = np.lib.format.open_memmap('mmap-tex.npy', mode='w+', dtype=np.float64, shape=arr.shape)
-print(tex.shape)
 ols(arr, h, size=[2000, 2000], out=tex)
-print(tex.shape)
 texToFile(tex, 'hankel-texshade-alpha-{}-n-{}-mmap.png'.format(alpha, Nwidth))
