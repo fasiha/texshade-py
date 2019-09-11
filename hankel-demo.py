@@ -29,7 +29,7 @@ texToFile(
 Nwidth = 500
 Nhalfband = 128
 
-h = texshade.halfHankel(Nwidth, alpha, hbTaps=Nhalfband)
+h = texshade.hankel.halfHankel(Nwidth, alpha, hbTaps=Nhalfband)
 print('halfbanded', h.shape)
 texToFile(
     fftconvolve(arr, h, mode='same'),

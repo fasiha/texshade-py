@@ -4,6 +4,16 @@ import numpy as np
 
 
 def touint(x, cmin, cmax, dtype=np.uint8):
+  """Convert an array to an array of unsigned integers by clamping and scaling
+
+  Given an array of numbers `x`, and the desired min and max values, `cmin` and
+  `cmax` respectively, and optionally a `dtype` that defaults to `uint8`, clamp
+  the values of `x` to between `cmin` and `cmax` (i.e., if a pixel is less than
+  `cmin`, it will be treated as being equal to `cmin`) and scale the values
+  linearly to the full range supported by `dtype`. When `dtype` is `np.uint8`,
+  e.g., the output will have values between 0 (originally `cmin`) and 255
+  (originally `cmax`).
+  """
   # clamp x between cmin and cmax
   x[x < cmin] = cmin
   x[x > cmax] = cmax
@@ -14,7 +24,8 @@ def touint(x, cmin, cmax, dtype=np.uint8):
   return (ret).astype(dtype)
 
 
-def toPng(scaled, fname):
+def toPng(scaled, fname: str):
+  """Write a uint8 array `scaled` to a PNG file `fname`"""
   from PIL import Image
   newimage = Image.new('L', (scaled.shape[1], scaled.shape[0]))  # type, (width, height)
   newimage.putdata(scaled.ravel())

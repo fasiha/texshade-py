@@ -5,7 +5,21 @@ import numpy as np
 from nextprod import nextprod
 
 
-def texshadeFFT(x, alpha, verbose=True):
+def texshadeFFT(x, alpha, verbose=False):
+  """FFT-based texture-shading elevation
+
+  Given an array `x` of elevation data and an `alpha` > 0, apply the
+  texture-shading algorithm using the full (real-only) FFT: the entire `x` array
+  will be FFT'd.
+
+  `alpha` is the shading detail factor, i.e., the power of the
+  fractional-Laplacian operator. `alpha=0` means no detail (output is the
+  input). `alpha=2.0` is the full (non-fractional) Laplacian operator and is
+  probably too high. `alpha <= 1.0` seem aesthetically pleasing.
+
+  Returns an array the same dimensions as `x` that contains the texture-shaded
+  version of the input array.
+  """
   Nyx = [nextprod([2, 3, 5, 7], x) for x in x.shape]
 
   fy = scifft.rfftfreq(Nyx[0])[:, np.newaxis].astype(x.dtype)
@@ -39,7 +53,7 @@ def texshadeSpatial(
     interpMethod=True,
     sampleSpacing=None,
     hbTaps=128,
-    hbPassbandWidth=0.03,
+    hbtransitionWidth=0.03,
     # ols kwargs
     size=None,
     nfft=None,
@@ -52,7 +66,7 @@ def texshadeSpatial(
       interpMethod=interpMethod,
       sampleSpacing=sampleSpacing,
       hbTaps=hbTaps,
-      hbPassbandWidth=hbPassbandWidth,
+      hbtransitionWidth=hbtransitionWidth,
   )
 
   return ols(x, h, size=size, nfft=nfft, out=out)
