@@ -32,10 +32,36 @@ def toPng(scaled, fname: str):
   newimage.save(fname)
 
 
+def texToPng(tex, fname, quantiles=None, borderFractions=None):
+  """Quantile a texture-shaded array and write it to 8-bit PNG
+
+  Given `tex`, a 2D array, and a `fname` path to a PNG file, and optionally a
+  2-list `quantiles` (defaults to [0.01, 0.99], i.e., 1% and 99%), clamp the
+  array to the quantile-values and write to a PNG. If `borderFractions`, also a
+  2-list, is given, 
+
+  `[np.round(total * frac) for total, frac in zip(tex.shape, borderFractions)]`
+  
+  pixels on either side of the border in each dimension are ignored in
+  computing the quantiles.
+  """
+  if quantiles is None:
+    quantiles = [0.01, 0.99]
+  assert all([x >= 0 and x <= 1 for x in quantiles])
+  if borderFractions is None:
+    minmax = np.quantile(tex.ravel(), quantiles)
+  else:
+    assert all([x >= 0 and x < 1 for x in borderFractions])
+    border = [int(np.round(total * frac)) for total, frac in zip(tex.shape, borderFractions)]
+    slices = tuple(slice(p, -p if p > 0 else None) for p in border)
+    minmax = np.quantile(tex[slices].ravel(), quantiles)
+
+  scaled = touint(tex, minmax[0], minmax[1], np.uint8)
+  toPng(scaled, fname)
+
+
 if __name__ == '__main__':
   arr = np.load('merged.tif.npy')
   tex = np.load('merged.tif.npy.tex.npy')
-  minmax = np.quantile(tex.ravel(), [.01, .99])
-  scaled = touint(tex, minmax[0], minmax[1], np.uint8)
-  toPng(scaled, 'scaled.png')
+  texToPng(tex, 'scaled.png', quantiles=[.01, .99], borderFractions=[1e-2, 1e-2])
   toPng(touint(arr, np.min(arr), np.max(arr), np.uint8), 'orig.png')
