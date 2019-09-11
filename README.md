@@ -10,6 +10,15 @@ This repository contains (1) mathematical and (2) software details of a low-memo
 
 The mathematical trick, in a nutshell, is to use the Hankel transform to find a finite impulse response (FIR) filter that approximates the frequency-domain fractional-Laplacian operator, and apply that filter in the spatial domain via the efficient overlap-save algorithm. According to GitHub commit logs, I first derived this technique in 2015.
 
+## Installation and usage
+```
+$ pip install texshade
+```
+
+```py
+import texshade
+```
+
 ## The texture-shading algorithm
 
 The original texture-shading algorithm takes a 2D array of elevations, call it \\(x\\), and computes the texture-shaded elevation map,
@@ -30,12 +39,11 @@ Let's implement this in Python.
 # export texshade/texshade.py
 import scipy.fftpack as scifft
 import numpy as np
+from nextprod import nextprod
 
-nextpow2 = lambda v: list(map(int, 2**np.ceil(np.log2(v))))
 
-
-def texshade(x, alpha, verbose=True):
-  Nyx = nextpow2(x.shape)
+def texshadeFFT(x, alpha, verbose=True):
+  Nyx = [nextprod([2, 3, 5, 7], x) for x in x.shape]
 
   fy = scifft.rfftfreq(Nyx[0])[:, np.newaxis].astype(x.dtype)
   fx = scifft.rfftfreq(Nyx[1])[np.newaxis, :].astype(x.dtype)
@@ -167,7 +175,7 @@ if __name__ == '__main__':
 ```
 
 ```
-for i in orig.png scaled.png; do convert -filter Mitchell -sampling-factor 1x1 -quality 90 -resize 2048 \\(i \\)i.small.png; done
+for i in orig.png scaled.png; do convert -filter Mitchell -sampling-factor 1x1 -quality 90 -resize 2048 $i $i.small.png; done
 ```
 
 ### Original
@@ -494,11 +502,44 @@ The overlap-save method (and its closely-related sibling, the overlap-add method
 The overlap-save implementation I wrote is largely out of the scope of this texture-shading library, so let's just import it and show how we can use it, along with memory-mapped inputs and outputs to *really* save memory.
 
 ```py
+# export texshade/texshade.py
+from ols import ols
+from .hankel import halfHankel
+
+
+def texshadeSpatial(
+    x,
+    alpha: float,
+    # halfHankel args
+    nDiameter: int,
+    # halfHankel kwargs
+    interpMethod=True,
+    sampleSpacing=None,
+    hbTaps=128,
+    hbPassbandWidth=0.03,
+    # ols kwargs
+    size=None,
+    nfft=None,
+    out=None,
+):
+
+  h = halfHankel(
+      nDiameter,
+      alpha,
+      interpMethod=interpMethod,
+      sampleSpacing=sampleSpacing,
+      hbTaps=hbTaps,
+      hbPassbandWidth=hbPassbandWidth,
+  )
+
+  return ols(x, h, size=size, nfft=nfft, out=out)
+```
+
+```py
 # export hankel-memmap.py
 import numpy as np
-from texshade import halfHankel
+from texshade import texshadeSpatial
 import postprocess
-from ols import ols
 
 fname = 'merged.tif.npy'
 arr = np.load(fname, mmap_mode='r')
@@ -511,13 +552,13 @@ def texToFile(tex, fname):
 
 
 alpha = 0.8
-
 Nwidth = 500
 Nhalfband = 128
-h = halfHankel(Nwidth, alpha, hbTaps=Nhalfband)
 
 tex = np.lib.format.open_memmap('mmap-tex.npy', mode='w+', dtype=np.float64, shape=arr.shape)
-ols(arr, h, size=[2000, 2000], out=tex)
+
+texshadeSpatial(arr, alpha, Nwidth, hbTaps=Nhalfband, out=tex, size=[2000, 2000])
+
 texToFile(tex, 'hankel-texshade-alpha-{}-n-{}-mmap.png'.format(alpha, Nwidth))
 ```
 
