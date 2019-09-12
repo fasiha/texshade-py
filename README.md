@@ -2,7 +2,9 @@
 
 ## Introduction
 
-See http://www.textureshading.com/Home.html for links to papers and slides by Leland Brown from 2010 and 2014 describing the technique of texture shading, but in summary, it is a method of processing digital elevation maps (DEMs) that highlights the network nature of topography, throwing ridges, canyons, and valleys into sharp relief.
+See [textureshading.com](http://www.textureshading.com/Home.html) for links to papers and slides by Leland Brown from 2010 and 2014 describing the technique of texture shading in detail, but in summary, it is a method of processing digital elevation maps (DEMs) that highlights the network nature of topography, throwing ridges, canyons, and valleys into sharp relief.
+
+My blog post contains some pretty images, mashing up various basemaps with texture-shaded terrain: [Texture-shaded Globe](https://fasiha.github.io/post/texshade/).
 
 This repository contains an open-source public-domain Python/Numpy software library to apply the texture shading algorithm on *extremely* large datasets. This is a challenge because a straightforward implementation of the texture-shading technique requires loading the entire elevation map into memory. For large datasets—like the ASTER Global DEM, which comes in at roughly 250 GB compressed—you either have to find a computer with a lot of memory (nodes with 1+ TB RAM are available at many scientific organizations as of 2019) or you have to modify the technique.
 
