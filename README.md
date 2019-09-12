@@ -8,7 +8,12 @@ This repository contains an open-source public-domain Python/Numpy software libr
 
 This repository contains (1) mathematical and (2) software details of a low-memory approximation to the original texture-shading algorithm that in practice produces texture-shaded imagery very similar to the full algorithm.
 
-The mathematical trick, in a nutshell, is to use the Hankel transform to find a finite impulse response (FIR) filter that approximates the frequency-domain fractional-Laplacian operator, and apply that filter in the spatial domain via the efficient overlap-save algorithm. According to GitHub commit logs, I first derived this technique in 2015.
+The mathematical trick, in a nutshell, is to use the Hankel transform to find a finite impulse response (FIR) filter that approximates the frequency-domain fractional-Laplacian operator, and apply that filter in the spatial domain via the efficient overlap-save algorithm. According to old Git commit logs, I first derived this technique in 2015.
+
+Links:
+- this mathematical–software document for reading: [homepage](https://fasiha.github.io/texshade-py/)
+- this code repository: on [GitHub](https://github.com/fasiha/texshade-py/)
+- this module: on [PyPI](https://pypi.org/project/texshade/)
 
 ## Installation and usage
 To install this library:
@@ -844,11 +849,13 @@ We can finally run the texture shading algorithm on enormous datasets without ne
 
 ## Developing in this repository
 
-I edit README.md in any old text editor as a Knuth-style [literate program](https://en.wikipedia.org/wiki/Literate_programming), and run `node md2code.js` to
+I edit README.md in any old text editor as a Knuth-style [literate program](https://en.wikipedia.org/wiki/Literate_programming), and run `$ node md2code.js` to
 - tangle it into Python code, and running the [Yapf](https://github.com/google/yapf) Python code formatter on it, and
 - gently weave the Markdown again with the Yapf-formatted code.
 
-If you want to use `md2code.js` (which is totally uncommented and ad hoc), install [Node.js](https://nodejs.org) and run `npm i` in this repo.
+If you want to use [`md2code.js`](./mdcode.js) (which is totally uncommented and ad hoc), install [Node.js](https://nodejs.org) and run `$ npm i` in this repo.
+
+To build the HTML, I use Pandoc and coordinate it with the [`Makefile`](./Makefile), which can be invoked by running `$ make`.
 
 ## Acknowledgements
 John Otander's [Retro](http://markdowncss.github.io/retro/) CSS theme. KaTeX for rendering equations.
