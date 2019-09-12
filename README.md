@@ -37,6 +37,21 @@ Implementation note: this function uses Scipy's FFTPACK routines (in `scipy.fftp
 ### `texshadeSpatial` Low-memory approximation of the texture shading algorithm
 Full signature:
 ```py
+def texshadeSpatial(
+    x: np.ndarray,
+    alpha: float,
+    # halfHankel args
+    nDiameter: int,
+    # halfHankel kwargs
+    interpMethod=True,
+    sampleSpacing=None,
+    hbTaps=128,
+    hbTransitionWidth=0.03,
+    # ols kwargs
+    size=None,
+    nfft=None,
+    out=None,
+) -> np.ndarray:
 ```
 
 Unlike `texshade.texshadeFFT`, which computes an FFT of the entire input elevation array `x` and applies the fractional-Laplacian filter in the frequency domain, this function approximates that frequency response with a spatial-domain finite impulse response (FIR) filter that is applied in the spatial domain via fast-convolution (overlap-save method). This allows `x` to be memory-mapped and/or very large relative to the amount of free system memory.
@@ -78,6 +93,8 @@ I assume your input pixels are int16 or float32, so much smaller before FFT than
 `out` allows you to specify the output array to store the results in. This is useful when you have a memory-mapped array prepared to accept the output of the algorithm, which will be float64. If `out.dtype` is not `float64`, then Numpy will perform a conversion, which might be expensive. If provided, this is returned. If not specified, a new array is allocated, filled, and returned.
 
 ## The texture-shading algorithm
+
+> N.B. The following contains LaTeX-typeset mathematics. If you see gibberish instead of math, make sure you're reading this on [the repo website](https://fasiha.github.io/texshade-py), where KaTeX will format it (assuming you have JavaScript enabled). And in case you want it, here's the [GitHub repo](https://github.com/fasiha/texshade-py/) itself.
 
 The original texture shading algorithm takes a 2D array of elevations, call it \\(x\\), and computes the texture-shaded elevation map,
 
@@ -825,7 +842,13 @@ This image is qualitatively identical to the original texture-shaded output [pre
 
 We can finally run the texture shading algorithm on enormous datasets without needing gargantuan amounts of memory.
 
-## Developing this repository
+## Developing in this repository
+
+I edit README.md in any old text editor as a Knuth-style [literate program](https://en.wikipedia.org/wiki/Literate_programming), and run `node md2code.js` to
+- tangle it into Python code, and running the [Yapf](https://github.com/google/yapf) Python code formatter on it, and
+- gently weave the Markdown again with the Yapf-formatted code.
+
+If you want to use `md2code.js` (which is totally uncommented and ad hoc), install [Node.js](https://nodejs.org) and run `npm i` in this repo.
 
 ## Acknowledgements
 John Otander's [Retro](http://markdowncss.github.io/retro/) CSS theme. KaTeX for rendering equations.
