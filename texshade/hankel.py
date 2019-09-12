@@ -7,21 +7,22 @@ from scipy.signal import convolve2d
 import numpy.fft as fft
 import functools
 from scipy.interpolate import interp1d
+from typing import Dict
 
 
 @functools.lru_cache(maxsize=None)
-def spatial(r, a, integralMax=np.pi):
+def spatial(r: float, a: float, integralMax=np.pi) -> float:
   "Evaluate L(r), proportional to the Fourier transform of |f|**α"
   # Wolfram Alpha: `2*pi*Integrate[f^a * BesselJ[0, k * f] * f, f, 0, m]`
   return float(hyper((0.5 * a + 1,), (1.0, 0.5 * a + 2), -0.25 * (r * integralMax)**2))
 
 
-def vec(v):
+def vec(v: np.ndarray) -> np.ndarray:
   "Convert a Numpy array to a column vector"
   return v.reshape(v.size, -1)
 
 
-def fullHankel(n: int, alpha: float, interpMethod=True, sampleSpacing=None):
+def fullHankel(n: int, alpha: float, interpMethod=True, sampleSpacing=None) -> np.ndarray:
   """Build a FIR filter approximating the fractional-Laplacian operator in the
   middle of its frequency response (non-ideal)
 
@@ -61,7 +62,7 @@ def fullHankel(n: int, alpha: float, interpMethod=True, sampleSpacing=None):
   return hmat
 
 
-def designHalfband(N: int, transitionWidth: float):
+def designHalfband(N: int, transitionWidth: float) -> np.ndarray:
   """Use the Remez exchange to design a halfband low-pass filter
 
   `N` taps, with `transitionWidth < 0.5` governing the transition band.
@@ -78,7 +79,7 @@ def designHalfband(N: int, transitionWidth: float):
   return h
 
 
-def halfband(hmat, taps=128, transitionWidth=0.03):
+def halfband(hmat: np.ndarray, taps=128, transitionWidth=0.03) -> np.ndarray:
   """Decimate an array by half
 
   Design a low-pass halfband filter with `taps` length and with transition band
@@ -93,7 +94,12 @@ def halfband(hmat, taps=128, transitionWidth=0.03):
   return finalFilter
 
 
-def halfHankel(n, alpha, interpMethod=True, sampleSpacing=None, hbTaps=128, hbtransitionWidth=0.03):
+def halfHankel(n: int,
+               alpha: float,
+               interpMethod=True,
+               sampleSpacing=None,
+               hbTaps=128,
+               hbTransitionWidth=0.03) -> np.ndarray:
   """Build the FIR filter approximating the fractional-Laplacian operator over
   all frequencies (ideal)
 
@@ -105,16 +111,16 @@ def halfHankel(n, alpha, interpMethod=True, sampleSpacing=None, hbTaps=128, hbtr
   which generates the non-ideal spatial filter.
 
   A half-band filter of `hbTaps` length and with transition band
-  `hbtransitionWidth` is designed (via `hankel.designHalfband`) and used to
+  `hbTransitionWidth` is designed (via `hankel.designHalfband`) and used to
   decimate the output of `hankel.fullHankel`. This decimated array is returned.
   """
   return halfband(
       fullHankel(n, alpha, interpMethod=interpMethod, sampleSpacing=sampleSpacing),
       taps=hbTaps,
-      transitionWidth=hbtransitionWidth)
+      transitionWidth=hbTransitionWidth)
 
 
-def precomputeLoad(alpha: float, N: int, spacing: float):
+def precomputeLoad(alpha: float, N: int, spacing: float) -> Dict[str, np.ndarray]:
   """Store and load gridded evaluations of the spatial-domain function
   `hankel.spatial` to disk
 

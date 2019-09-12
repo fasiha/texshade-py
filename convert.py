@@ -9,7 +9,7 @@ import gdal, gdalconst
 fname = 'merged.tif'
 
 
-def filenameToData(fname, dtype=np.float32):
+def filenameToData(fname: str, dtype=np.float32):
   """Reads all bands"""
   fileHandle = gdal.Open(fname, gdalconst.GA_ReadOnly)
   result = np.squeeze(

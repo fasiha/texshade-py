@@ -3,7 +3,7 @@
 import numpy as np
 
 
-def touint(x, cmin, cmax, dtype=np.uint8):
+def touint(x: np.ndarray, cmin, cmax, dtype=np.uint8) -> np.ndarray:
   """Convert an array to an array of unsigned integers by clamping and scaling
 
   Given an array of numbers `x`, and the desired min and max values, `cmin` and
@@ -24,7 +24,7 @@ def touint(x, cmin, cmax, dtype=np.uint8):
   return (ret).astype(dtype)
 
 
-def toPng(scaled, fname: str):
+def toPng(scaled: np.ndarray, fname: str):
   """Write a uint8 array `scaled` to a PNG file `fname`"""
   from PIL import Image
   newimage = Image.new('L', (scaled.shape[1], scaled.shape[0]))  # type, (width, height)
@@ -32,7 +32,7 @@ def toPng(scaled, fname: str):
   newimage.save(fname)
 
 
-def texToPng(tex, fname, quantiles=None, borderFractions=None):
+def texToPng(tex: np.ndarray, fname: str, quantiles=None, borderFractions=None):
   """Quantile a texture-shaded array and write it to 8-bit PNG
 
   Given `tex`, a 2D array, and a `fname` path to a PNG file, and optionally a
