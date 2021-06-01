@@ -173,6 +173,17 @@ def texshadeFFT(x: np.ndarray, alpha: float) -> np.ndarray:
 ```
 
 ## Test setup
+This section shows the entire pipeline that texture shading is a part of:
+- getting some raw digital elevation data as multiple files,
+- merging them into a single file,
+- applying the texture shading algorithm,
+- quantizing the results so each pixel is a byte (256 levels), and
+- emitting a georegistered texture-shaded terrain.
+
+This section makes use of GDAL command-line tools, as well as GDAL and Pillow Python libraries, to demonstrate this entire workflow but these tools are *not necessary* to use the library!
+
+Let's begin.
+
 I've downloaded three tiles from the SRTM DEM (from [this page at SDSC.edu](https://cloud.sdsc.edu/v1/AUTH_opentopography/Raster/SRTM_GL1/SRTM_GL1_srtm/North/North_0_29/)) on the African coastline near 0° N and 0° W and merged them into a single raster using [GDAL](https://gdal.org/), which I installed using [Brew](https://formulae.brew.sh/formula/gdal): installing these is outside the scope of this document, but any DEM you have can be used.
 ```
 wget https://cloud.sdsc.edu/v1/AUTH_opentopography/Raster/SRTM_GL1/SRTM_GL1_srtm/North/North_0_29/N00E009.hgt \
@@ -211,6 +222,9 @@ Band 1 Block=10801x1 Type=Int16, ColorInterp=Gray
   NoData Value=-32768
   Unit Type: m
 ```
+This looks good: we have a 10801 by 3601 image whose center is close to the equator, as eppected.
+
+I want to confine GDAL and geo-registered images to the edges of my workflow so I want to convert this elevation data to a simple Numpy array. This next script, `convert.py`, does that.
 
 ```py
 # export convert.py
@@ -237,6 +251,7 @@ def filenameToData(fname: str, dtype=np.float32):
 np.save(fname, filenameToData(fname))
 ```
 
+Now I'd like to apply the texture-shading algorithm—what you've all come for! This script, `demo.py`, exercises the `texshade` library published by this repo. We've picked α of 0.8.
 ```py
 # export demo.py
 import texshade
@@ -249,9 +264,14 @@ tex = texshade.texshadeFFT(arr, 0.8)
 np.save(fname + '.tex', tex)
 ```
 
+We need a big script to export the texture-shaded Numpy array to a georegistered image, so we can easily compare the output with our usual GIS tools. We'd also like to export the original and texture-shaded terrains as PNG files for easy visualization in browsers. This final script, `postprocess.py`, does all this. I've included it fully for completeness.
 ```py
 # export postprocess.py
+# -*- coding: utf-8 -*-
+
 import numpy as np
+import gdal, gdalconst
+from osgeo import osr
 
 
 def touint(x: np.ndarray, cmin, cmax, dtype=np.uint8) -> np.ndarray:
@@ -309,15 +329,69 @@ def texToPng(tex: np.ndarray, fname: str, quantiles=None, borderFractions=None):
 
   scaled = touint(tex, minmax[0], minmax[1], np.uint8)
   toPng(scaled, fname)
+  return scaled
+
+
+# Adapted from EddyTheB, http://gis.stackexchange.com/a/57006/8623
+def getGeoInfo(filename):
+  "Extract a bunch of GDAL-specific metadata from a file"
+  source = gdal.Open(filename, gdalconst.GA_ReadOnly)
+  noDataValue = source.GetRasterBand(1).GetNoDataValue()
+  xsize = source.RasterXSize
+  ysize = source.RasterYSize
+  geoTransform = source.GetGeoTransform()
+  proj = osr.SpatialReference()
+  proj.ImportFromWkt(source.GetProjectionRef())
+  dtype = source.GetRasterBand(1).DataType
+  dtype = gdal.GetDataTypeName(dtype)
+  return noDataValue, xsize, ysize, geoTransform, proj, dtype
+
+
+def createGeoTiff(filename,
+                  array,
+                  driver,
+                  noDataValue,
+                  xsize,
+                  ysize,
+                  geoTransform,
+                  proj,
+                  dtype,
+                  numBands=1):
+  "Given an array, and a bunch of GDAL metadata, create a GeoTIFF"
+  # Set up the dataset
+  DataSet = driver.Create(filename, xsize, ysize, numBands, dtype, options=['COMPRESS=LZW'])
+  DataSet.SetGeoTransform(geoTransform)
+  DataSet.SetProjection(proj.ExportToWkt())
+  # Write the array
+  if numBands == 1:
+    DataSet.GetRasterBand(numBands).WriteArray(array)
+    if noDataValue is not None:
+      DataSet.GetRasterBand(numBands).SetNoDataValue(noDataValue)
+  else:
+    for bid in range(numBands):
+      DataSet.GetRasterBand(bid + 1).WriteArray(array[:, :, bid])
+      if noDataValue is not None:
+        DataSet.GetRasterBand(bid + 1).SetNoDataValue(noDataValue)
+  return filename
 
 
 if __name__ == '__main__':
-  arr = np.load('merged.tif.npy')
   tex = np.load('merged.tif.npy.tex.npy')
-  texToPng(tex, 'scaled.png', quantiles=[.01, .99], borderFractions=[1e-2, 1e-2])
-  toPng(touint(arr, np.min(arr), np.max(arr), np.uint8), 'orig.png')
+  scaled = texToPng(tex, 'scaled.png', quantiles=[.01, .99], borderFractions=[1e-2, 1e-2])
+
+  # save as GeoTiff
+  driver = gdal.GetDriverByName('GTiff')
+  noDataValue, xsize, ysize, geoTransform, proj, dtype = getGeoInfo('merged.tif')
+  createGeoTiff('scaled.tif', scaled, driver, 0, xsize, ysize, geoTransform, proj,
+                gdalconst.GDT_Byte)
+  print('done exporting texshaded PNG and GeoTIFF')
+
+  # write original DEM too
+  tex = np.load('merged.tif.npy')
+  toPng(touint(tex, np.min(tex), np.max(tex), np.uint8), 'orig.png')
 ```
 
+This next command resizes the output images so I can include them in this repo.
 ```
 for i in orig.png scaled.png; do convert -filter Mitchell -sampling-factor 1x1 -quality 90 -resize 2048 $i $i.small.png; done
 ```

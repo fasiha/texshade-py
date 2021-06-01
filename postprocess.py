@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+import gdal, gdalconst
+from osgeo import osr
 
 
 def touint(x: np.ndarray, cmin, cmax, dtype=np.uint8) -> np.ndarray:
@@ -58,10 +60,63 @@ def texToPng(tex: np.ndarray, fname: str, quantiles=None, borderFractions=None):
 
   scaled = touint(tex, minmax[0], minmax[1], np.uint8)
   toPng(scaled, fname)
+  return scaled
+
+
+# Adapted from EddyTheB, http://gis.stackexchange.com/a/57006/8623
+def getGeoInfo(filename):
+  "Extract a bunch of GDAL-specific metadata from a file"
+  source = gdal.Open(filename, gdalconst.GA_ReadOnly)
+  noDataValue = source.GetRasterBand(1).GetNoDataValue()
+  xsize = source.RasterXSize
+  ysize = source.RasterYSize
+  geoTransform = source.GetGeoTransform()
+  proj = osr.SpatialReference()
+  proj.ImportFromWkt(source.GetProjectionRef())
+  dtype = source.GetRasterBand(1).DataType
+  dtype = gdal.GetDataTypeName(dtype)
+  return noDataValue, xsize, ysize, geoTransform, proj, dtype
+
+
+def createGeoTiff(filename,
+                  array,
+                  driver,
+                  noDataValue,
+                  xsize,
+                  ysize,
+                  geoTransform,
+                  proj,
+                  dtype,
+                  numBands=1):
+  "Given an array, and a bunch of GDAL metadata, create a GeoTIFF"
+  # Set up the dataset
+  DataSet = driver.Create(filename, xsize, ysize, numBands, dtype, options=['COMPRESS=LZW'])
+  DataSet.SetGeoTransform(geoTransform)
+  DataSet.SetProjection(proj.ExportToWkt())
+  # Write the array
+  if numBands == 1:
+    DataSet.GetRasterBand(numBands).WriteArray(array)
+    if noDataValue is not None:
+      DataSet.GetRasterBand(numBands).SetNoDataValue(noDataValue)
+  else:
+    for bid in range(numBands):
+      DataSet.GetRasterBand(bid + 1).WriteArray(array[:, :, bid])
+      if noDataValue is not None:
+        DataSet.GetRasterBand(bid + 1).SetNoDataValue(noDataValue)
+  return filename
 
 
 if __name__ == '__main__':
-  arr = np.load('merged.tif.npy')
   tex = np.load('merged.tif.npy.tex.npy')
-  texToPng(tex, 'scaled.png', quantiles=[.01, .99], borderFractions=[1e-2, 1e-2])
-  toPng(touint(arr, np.min(arr), np.max(arr), np.uint8), 'orig.png')
+  scaled = texToPng(tex, 'scaled.png', quantiles=[.01, .99], borderFractions=[1e-2, 1e-2])
+
+  # save as GeoTiff
+  driver = gdal.GetDriverByName('GTiff')
+  noDataValue, xsize, ysize, geoTransform, proj, dtype = getGeoInfo('merged.tif')
+  createGeoTiff('scaled.tif', scaled, driver, 0, xsize, ysize, geoTransform, proj,
+                gdalconst.GDT_Byte)
+  print('done exporting texshaded PNG and GeoTIFF')
+
+  # write original DEM too
+  tex = np.load('merged.tif.npy')
+  toPng(touint(tex, np.min(tex), np.max(tex), np.uint8), 'orig.png')
