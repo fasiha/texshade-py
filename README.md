@@ -234,6 +234,7 @@ GeoTIF to a NPY file for pure-Numpy non-GDAL demo.
 """
 import numpy as np
 import gdal, gdalconst
+
 fname = 'merged.tif'
 
 
@@ -256,6 +257,7 @@ Now I'd like to apply the texture-shading algorithm—what you've all come for! 
 # export demo.py
 import texshade
 import numpy as np
+
 fname = 'merged.tif.npy'
 
 arr = np.load(fname)
@@ -267,8 +269,6 @@ np.save(fname + '.tex', tex)
 We need a big script to export the texture-shaded Numpy array to a georegistered image, so we can easily compare the output with our usual GIS tools. We'd also like to export the original and texture-shaded terrains as PNG files for easy visualization in browsers. This final script, `postprocess.py`, does all this. I've included it fully for completeness.
 ```py
 # export postprocess.py
-# -*- coding: utf-8 -*-
-
 import numpy as np
 import gdal, gdalconst
 from osgeo import osr
@@ -436,6 +436,7 @@ import numpy as np
 from mpmath import hyper
 import numpy.fft as fft
 import pylab as plt
+
 plt.style.use('ggplot')
 
 
@@ -530,6 +531,7 @@ but \\(|\vec f|^α\\) includes the *corners* of the frequency domain, not the ra
 ```py
 # export math-hankel.py
 import scipy.signal as sig
+
 lpf = sig.iirfilter(8, 0.5, btype='lowpass', ftype='butter')
 hiir = sig.filtfilt(*lpf, sig.filtfilt(*lpf, h, axis=0), axis=1)
 

@@ -6,6 +6,7 @@ GeoTIF to a NPY file for pure-Numpy non-GDAL demo.
 """
 import numpy as np
 import gdal, gdalconst
+
 fname = 'merged.tif'
 
 

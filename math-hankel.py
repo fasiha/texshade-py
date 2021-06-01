@@ -4,6 +4,7 @@ import numpy as np
 from mpmath import hyper
 import numpy.fft as fft
 import pylab as plt
+
 plt.style.use('ggplot')
 
 
@@ -71,6 +72,7 @@ plt.title('Cut of actual F[L(r)] versus expected |4⋅f|^0.8')
 plt.savefig('full-hankel-actual-expected.png', dpi=300, bbox_inches='tight')
 plt.savefig('full-hankel-actual-expected.svg', bbox_inches='tight')
 import scipy.signal as sig
+
 lpf = sig.iirfilter(8, 0.5, btype='lowpass', ftype='butter')
 hiir = sig.filtfilt(*lpf, sig.filtfilt(*lpf, h, axis=0), axis=1)
 

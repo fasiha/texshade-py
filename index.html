@@ -454,6 +454,16 @@
 <span id="cb4-51"><a href="#cb4-51"></a>  <span class="co"># Return the same size as input</span></span>
 <span id="cb4-52"><a href="#cb4-52"></a>  <span class="cf">return</span> xr[:x.shape[<span class="dv">0</span>], :x.shape[<span class="dv">1</span>]]</span></code></pre></div>
 <h2 id="test-setup">Test setup</h2>
+<p>This section shows the entire pipeline that texture shading is a part of:</p>
+<ul>
+<li>getting some raw digital elevation data as multiple files,</li>
+<li>merging them into a single file,</li>
+<li>applying the texture shading algorithm,</li>
+<li>quantizing the results so each pixel is a byte (256 levels), and</li>
+<li>emitting a georegistered texture-shaded terrain.</li>
+</ul>
+<p>This section makes use of GDAL command-line tools, as well as GDAL and Pillow Python libraries, to demonstrate this entire workflow but these tools are <em>not necessary</em> to use the library!</p>
+<p>Let's begin.</p>
 <p>I've downloaded three tiles from the SRTM DEM (from <a href="https://cloud.sdsc.edu/v1/AUTH_opentopography/Raster/SRTM_GL1/SRTM_GL1_srtm/North/North_0_29/">this page at SDSC.edu</a>) on the African coastline near 0° N and 0° W and merged them into a single raster using <a href="https://gdal.org/">GDAL</a>, which I installed using <a href="https://formulae.brew.sh/formula/gdal">Brew</a>: installing these is outside the scope of this document, but any DEM you have can be used.</p>
 <pre><code>wget https://cloud.sdsc.edu/v1/AUTH_opentopography/Raster/SRTM_GL1/SRTM_GL1_srtm/North/North_0_29/N00E009.hgt \
   https://cloud.sdsc.edu/v1/AUTH_opentopography/Raster/SRTM_GL1/SRTM_GL1_srtm/North/North_0_29/N00E010.hgt \
@@ -487,6 +497,8 @@ Center      (  10.5000000,   0.5000000) ( 10d30&#39; 0.00&quot;E,  0d30&#39; 0.0
 Band 1 Block=10801x1 Type=Int16, ColorInterp=Gray
   NoData Value=-32768
   Unit Type: m</code></pre>
+<p>This looks good: we have a 10801 by 3601 image whose center is close to the equator, as eppected.</p>
+<p>I want to confine GDAL and geo-registered images to the edges of my workflow so I want to convert this elevation data to a simple Numpy array. This next script, <code>convert.py</code>, does that.</p>
 <div class="sourceCode" id="cb7"><pre class="sourceCode py"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1"></a><span class="co"># export convert.py</span></span>
 <span id="cb7-2"><a href="#cb7-2"></a><span class="co">&quot;&quot;&quot;</span></span>
 <span id="cb7-3"><a href="#cb7-3"></a><span class="co">Quick script intended to be used only by a user to convert a specific</span></span>
@@ -494,96 +506,156 @@ Band 1 Block=10801x1 Type=Int16, ColorInterp=Gray
 <span id="cb7-5"><a href="#cb7-5"></a><span class="co">&quot;&quot;&quot;</span></span>
 <span id="cb7-6"><a href="#cb7-6"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb7-7"><a href="#cb7-7"></a><span class="im">import</span> gdal, gdalconst</span>
-<span id="cb7-8"><a href="#cb7-8"></a>fname <span class="op">=</span> <span class="st">&#39;merged.tif&#39;</span></span>
-<span id="cb7-9"><a href="#cb7-9"></a></span>
+<span id="cb7-8"><a href="#cb7-8"></a></span>
+<span id="cb7-9"><a href="#cb7-9"></a>fname <span class="op">=</span> <span class="st">&#39;merged.tif&#39;</span></span>
 <span id="cb7-10"><a href="#cb7-10"></a></span>
-<span id="cb7-11"><a href="#cb7-11"></a><span class="kw">def</span> filenameToData(fname: <span class="bu">str</span>, dtype<span class="op">=</span>np.float32):</span>
-<span id="cb7-12"><a href="#cb7-12"></a>  <span class="co">&quot;&quot;&quot;Reads all bands&quot;&quot;&quot;</span></span>
-<span id="cb7-13"><a href="#cb7-13"></a>  fileHandle <span class="op">=</span> gdal.Open(fname, gdalconst.GA_ReadOnly)</span>
-<span id="cb7-14"><a href="#cb7-14"></a>  result <span class="op">=</span> np.squeeze(</span>
-<span id="cb7-15"><a href="#cb7-15"></a>      np.dstack(</span>
-<span id="cb7-16"><a href="#cb7-16"></a>          [fileHandle.GetRasterBand(n <span class="op">+</span> <span class="dv">1</span>).ReadAsArray() <span class="cf">for</span> n <span class="kw">in</span> <span class="bu">range</span>(fileHandle.RasterCount)]))</span>
-<span id="cb7-17"><a href="#cb7-17"></a>  <span class="cf">if</span> dtype <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
-<span id="cb7-18"><a href="#cb7-18"></a>    <span class="cf">return</span> result.astype(dtype)</span>
-<span id="cb7-19"><a href="#cb7-19"></a>  <span class="cf">return</span> result</span>
-<span id="cb7-20"><a href="#cb7-20"></a></span>
+<span id="cb7-11"><a href="#cb7-11"></a></span>
+<span id="cb7-12"><a href="#cb7-12"></a><span class="kw">def</span> filenameToData(fname: <span class="bu">str</span>, dtype<span class="op">=</span>np.float32):</span>
+<span id="cb7-13"><a href="#cb7-13"></a>  <span class="co">&quot;&quot;&quot;Reads all bands&quot;&quot;&quot;</span></span>
+<span id="cb7-14"><a href="#cb7-14"></a>  fileHandle <span class="op">=</span> gdal.Open(fname, gdalconst.GA_ReadOnly)</span>
+<span id="cb7-15"><a href="#cb7-15"></a>  result <span class="op">=</span> np.squeeze(</span>
+<span id="cb7-16"><a href="#cb7-16"></a>      np.dstack(</span>
+<span id="cb7-17"><a href="#cb7-17"></a>          [fileHandle.GetRasterBand(n <span class="op">+</span> <span class="dv">1</span>).ReadAsArray() <span class="cf">for</span> n <span class="kw">in</span> <span class="bu">range</span>(fileHandle.RasterCount)]))</span>
+<span id="cb7-18"><a href="#cb7-18"></a>  <span class="cf">if</span> dtype <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb7-19"><a href="#cb7-19"></a>    <span class="cf">return</span> result.astype(dtype)</span>
+<span id="cb7-20"><a href="#cb7-20"></a>  <span class="cf">return</span> result</span>
 <span id="cb7-21"><a href="#cb7-21"></a></span>
-<span id="cb7-22"><a href="#cb7-22"></a>np.save(fname, filenameToData(fname))</span></code></pre></div>
+<span id="cb7-22"><a href="#cb7-22"></a></span>
+<span id="cb7-23"><a href="#cb7-23"></a>np.save(fname, filenameToData(fname))</span></code></pre></div>
+<p>Now I'd like to apply the texture-shading algorithm—what you've all come for! This script, <code>demo.py</code>, exercises the <code>texshade</code> library published by this repo. We've picked α of 0.8.</p>
 <div class="sourceCode" id="cb8"><pre class="sourceCode py"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1"></a><span class="co"># export demo.py</span></span>
 <span id="cb8-2"><a href="#cb8-2"></a><span class="im">import</span> texshade</span>
 <span id="cb8-3"><a href="#cb8-3"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb8-4"><a href="#cb8-4"></a>fname <span class="op">=</span> <span class="st">&#39;merged.tif.npy&#39;</span></span>
-<span id="cb8-5"><a href="#cb8-5"></a></span>
-<span id="cb8-6"><a href="#cb8-6"></a>arr <span class="op">=</span> np.load(fname)</span>
-<span id="cb8-7"><a href="#cb8-7"></a><span class="bu">print</span>(arr)</span>
-<span id="cb8-8"><a href="#cb8-8"></a>tex <span class="op">=</span> texshade.texshadeFFT(arr, <span class="fl">0.8</span>)</span>
-<span id="cb8-9"><a href="#cb8-9"></a>np.save(fname <span class="op">+</span> <span class="st">&#39;.tex&#39;</span>, tex)</span></code></pre></div>
+<span id="cb8-4"><a href="#cb8-4"></a></span>
+<span id="cb8-5"><a href="#cb8-5"></a>fname <span class="op">=</span> <span class="st">&#39;merged.tif.npy&#39;</span></span>
+<span id="cb8-6"><a href="#cb8-6"></a></span>
+<span id="cb8-7"><a href="#cb8-7"></a>arr <span class="op">=</span> np.load(fname)</span>
+<span id="cb8-8"><a href="#cb8-8"></a><span class="bu">print</span>(arr)</span>
+<span id="cb8-9"><a href="#cb8-9"></a>tex <span class="op">=</span> texshade.texshadeFFT(arr, <span class="fl">0.8</span>)</span>
+<span id="cb8-10"><a href="#cb8-10"></a>np.save(fname <span class="op">+</span> <span class="st">&#39;.tex&#39;</span>, tex)</span></code></pre></div>
+<p>We need a big script to export the texture-shaded Numpy array to a georegistered image, so we can easily compare the output with our usual GIS tools. We'd also like to export the original and texture-shaded terrains as PNG files for easy visualization in browsers. This final script, <code>postprocess.py</code>, does all this. I've included it fully for completeness.</p>
 <div class="sourceCode" id="cb9"><pre class="sourceCode py"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1"></a><span class="co"># export postprocess.py</span></span>
 <span id="cb9-2"><a href="#cb9-2"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb9-3"><a href="#cb9-3"></a></span>
-<span id="cb9-4"><a href="#cb9-4"></a></span>
-<span id="cb9-5"><a href="#cb9-5"></a><span class="kw">def</span> touint(x: np.ndarray, cmin, cmax, dtype<span class="op">=</span>np.uint8) <span class="op">-&gt;</span> np.ndarray:</span>
-<span id="cb9-6"><a href="#cb9-6"></a>  <span class="co">&quot;&quot;&quot;Convert an array to an array of unsigned integers by clamping and scaling</span></span>
-<span id="cb9-7"><a href="#cb9-7"></a></span>
-<span id="cb9-8"><a href="#cb9-8"></a><span class="co">  Given an array of numbers `x`, and the desired min and max values, `cmin` and</span></span>
-<span id="cb9-9"><a href="#cb9-9"></a><span class="co">  `cmax` respectively, and optionally a `dtype` that defaults to `uint8`, clamp</span></span>
-<span id="cb9-10"><a href="#cb9-10"></a><span class="co">  the values of `x` to between `cmin` and `cmax` (i.e., if a pixel is less than</span></span>
-<span id="cb9-11"><a href="#cb9-11"></a><span class="co">  `cmin`, it will be treated as being equal to `cmin`) and scale the values</span></span>
-<span id="cb9-12"><a href="#cb9-12"></a><span class="co">  linearly to the full range supported by `dtype`. When `dtype` is `np.uint8`,</span></span>
-<span id="cb9-13"><a href="#cb9-13"></a><span class="co">  e.g., the output will have values between 0 (originally `cmin`) and 255</span></span>
-<span id="cb9-14"><a href="#cb9-14"></a><span class="co">  (originally `cmax`).</span></span>
-<span id="cb9-15"><a href="#cb9-15"></a><span class="co">  &quot;&quot;&quot;</span></span>
-<span id="cb9-16"><a href="#cb9-16"></a>  <span class="co"># clamp x between cmin and cmax</span></span>
-<span id="cb9-17"><a href="#cb9-17"></a>  x[x <span class="op">&lt;</span> cmin] <span class="op">=</span> cmin</span>
-<span id="cb9-18"><a href="#cb9-18"></a>  x[x <span class="op">&gt;</span> cmax] <span class="op">=</span> cmax</span>
-<span id="cb9-19"><a href="#cb9-19"></a>  <span class="co"># map [cmin, cmax] to [0, 2**depth-1-eps] linearly</span></span>
-<span id="cb9-20"><a href="#cb9-20"></a>  maxval <span class="op">=</span> <span class="dv">2</span><span class="op">**</span>(<span class="dv">8</span> <span class="op">*</span> dtype().itemsize) <span class="op">-</span> <span class="fl">1e-3</span></span>
-<span id="cb9-21"><a href="#cb9-21"></a>  slope <span class="op">=</span> (maxval <span class="op">-</span> <span class="fl">1.0</span>) <span class="op">/</span> (cmax <span class="op">-</span> cmin)</span>
-<span id="cb9-22"><a href="#cb9-22"></a>  ret <span class="op">=</span> slope <span class="op">*</span> (x <span class="op">-</span> cmin) <span class="op">+</span> <span class="dv">1</span></span>
-<span id="cb9-23"><a href="#cb9-23"></a>  <span class="cf">return</span> (ret).astype(dtype)</span>
-<span id="cb9-24"><a href="#cb9-24"></a></span>
-<span id="cb9-25"><a href="#cb9-25"></a></span>
-<span id="cb9-26"><a href="#cb9-26"></a><span class="kw">def</span> toPng(scaled: np.ndarray, fname: <span class="bu">str</span>):</span>
-<span id="cb9-27"><a href="#cb9-27"></a>  <span class="co">&quot;&quot;&quot;Write a uint8 array `scaled` to a PNG file `fname`&quot;&quot;&quot;</span></span>
-<span id="cb9-28"><a href="#cb9-28"></a>  <span class="im">from</span> PIL <span class="im">import</span> Image</span>
-<span id="cb9-29"><a href="#cb9-29"></a>  newimage <span class="op">=</span> Image.new(<span class="st">&#39;L&#39;</span>, (scaled.shape[<span class="dv">1</span>], scaled.shape[<span class="dv">0</span>]))  <span class="co"># type, (width, height)</span></span>
-<span id="cb9-30"><a href="#cb9-30"></a>  newimage.putdata(scaled.ravel())</span>
-<span id="cb9-31"><a href="#cb9-31"></a>  newimage.save(fname)</span>
-<span id="cb9-32"><a href="#cb9-32"></a></span>
-<span id="cb9-33"><a href="#cb9-33"></a></span>
-<span id="cb9-34"><a href="#cb9-34"></a><span class="kw">def</span> texToPng(tex: np.ndarray, fname: <span class="bu">str</span>, quantiles<span class="op">=</span><span class="va">None</span>, borderFractions<span class="op">=</span><span class="va">None</span>):</span>
-<span id="cb9-35"><a href="#cb9-35"></a>  <span class="co">&quot;&quot;&quot;Quantile a texture-shaded array and write it to 8-bit PNG</span></span>
-<span id="cb9-36"><a href="#cb9-36"></a></span>
-<span id="cb9-37"><a href="#cb9-37"></a><span class="co">  Given `tex`, a 2D array, and a `fname` path to a PNG file, and optionally a</span></span>
-<span id="cb9-38"><a href="#cb9-38"></a><span class="co">  2-list `quantiles` (defaults to [0.01, 0.99], i.e., 1% and 99%), clamp the</span></span>
-<span id="cb9-39"><a href="#cb9-39"></a><span class="co">  array to the quantile-values and write to a PNG. If `borderFractions`, also a</span></span>
-<span id="cb9-40"><a href="#cb9-40"></a><span class="co">  2-list, is given, </span></span>
-<span id="cb9-41"><a href="#cb9-41"></a></span>
-<span id="cb9-42"><a href="#cb9-42"></a><span class="co">  `[np.round(total * frac) for total, frac in zip(tex.shape, borderFractions)]`</span></span>
-<span id="cb9-43"><a href="#cb9-43"></a><span class="co">  </span></span>
-<span id="cb9-44"><a href="#cb9-44"></a><span class="co">  pixels on either side of the border in each dimension are ignored in</span></span>
-<span id="cb9-45"><a href="#cb9-45"></a><span class="co">  computing the quantiles.</span></span>
-<span id="cb9-46"><a href="#cb9-46"></a><span class="co">  &quot;&quot;&quot;</span></span>
-<span id="cb9-47"><a href="#cb9-47"></a>  <span class="cf">if</span> quantiles <span class="kw">is</span> <span class="va">None</span>:</span>
-<span id="cb9-48"><a href="#cb9-48"></a>    quantiles <span class="op">=</span> [<span class="fl">0.01</span>, <span class="fl">0.99</span>]</span>
-<span id="cb9-49"><a href="#cb9-49"></a>  <span class="cf">assert</span> <span class="bu">all</span>([x <span class="op">&gt;=</span> <span class="dv">0</span> <span class="kw">and</span> x <span class="op">&lt;=</span> <span class="dv">1</span> <span class="cf">for</span> x <span class="kw">in</span> quantiles])</span>
-<span id="cb9-50"><a href="#cb9-50"></a>  <span class="cf">if</span> borderFractions <span class="kw">is</span> <span class="va">None</span>:</span>
-<span id="cb9-51"><a href="#cb9-51"></a>    minmax <span class="op">=</span> np.quantile(tex.ravel(), quantiles)</span>
-<span id="cb9-52"><a href="#cb9-52"></a>  <span class="cf">else</span>:</span>
-<span id="cb9-53"><a href="#cb9-53"></a>    <span class="cf">assert</span> <span class="bu">all</span>([x <span class="op">&gt;=</span> <span class="dv">0</span> <span class="kw">and</span> x <span class="op">&lt;</span> <span class="dv">1</span> <span class="cf">for</span> x <span class="kw">in</span> borderFractions])</span>
-<span id="cb9-54"><a href="#cb9-54"></a>    border <span class="op">=</span> [<span class="bu">int</span>(np.<span class="bu">round</span>(total <span class="op">*</span> frac)) <span class="cf">for</span> total, frac <span class="kw">in</span> <span class="bu">zip</span>(tex.shape, borderFractions)]</span>
-<span id="cb9-55"><a href="#cb9-55"></a>    slices <span class="op">=</span> <span class="bu">tuple</span>(<span class="bu">slice</span>(p, <span class="op">-</span>p <span class="cf">if</span> p <span class="op">&gt;</span> <span class="dv">0</span> <span class="cf">else</span> <span class="va">None</span>) <span class="cf">for</span> p <span class="kw">in</span> border)</span>
-<span id="cb9-56"><a href="#cb9-56"></a>    minmax <span class="op">=</span> np.quantile(tex[slices].ravel(), quantiles)</span>
-<span id="cb9-57"><a href="#cb9-57"></a></span>
-<span id="cb9-58"><a href="#cb9-58"></a>  scaled <span class="op">=</span> touint(tex, minmax[<span class="dv">0</span>], minmax[<span class="dv">1</span>], np.uint8)</span>
-<span id="cb9-59"><a href="#cb9-59"></a>  toPng(scaled, fname)</span>
-<span id="cb9-60"><a href="#cb9-60"></a></span>
-<span id="cb9-61"><a href="#cb9-61"></a></span>
-<span id="cb9-62"><a href="#cb9-62"></a><span class="cf">if</span> <span class="va">__name__</span> <span class="op">==</span> <span class="st">&#39;__main__&#39;</span>:</span>
-<span id="cb9-63"><a href="#cb9-63"></a>  arr <span class="op">=</span> np.load(<span class="st">&#39;merged.tif.npy&#39;</span>)</span>
-<span id="cb9-64"><a href="#cb9-64"></a>  tex <span class="op">=</span> np.load(<span class="st">&#39;merged.tif.npy.tex.npy&#39;</span>)</span>
-<span id="cb9-65"><a href="#cb9-65"></a>  texToPng(tex, <span class="st">&#39;scaled.png&#39;</span>, quantiles<span class="op">=</span>[.<span class="dv">01</span>, <span class="fl">.99</span>], borderFractions<span class="op">=</span>[<span class="fl">1e-2</span>, <span class="fl">1e-2</span>])</span>
-<span id="cb9-66"><a href="#cb9-66"></a>  toPng(touint(arr, np.<span class="bu">min</span>(arr), np.<span class="bu">max</span>(arr), np.uint8), <span class="st">&#39;orig.png&#39;</span>)</span></code></pre></div>
+<span id="cb9-3"><a href="#cb9-3"></a><span class="im">import</span> gdal, gdalconst</span>
+<span id="cb9-4"><a href="#cb9-4"></a><span class="im">from</span> osgeo <span class="im">import</span> osr</span>
+<span id="cb9-5"><a href="#cb9-5"></a></span>
+<span id="cb9-6"><a href="#cb9-6"></a></span>
+<span id="cb9-7"><a href="#cb9-7"></a><span class="kw">def</span> touint(x: np.ndarray, cmin, cmax, dtype<span class="op">=</span>np.uint8) <span class="op">-&gt;</span> np.ndarray:</span>
+<span id="cb9-8"><a href="#cb9-8"></a>  <span class="co">&quot;&quot;&quot;Convert an array to an array of unsigned integers by clamping and scaling</span></span>
+<span id="cb9-9"><a href="#cb9-9"></a></span>
+<span id="cb9-10"><a href="#cb9-10"></a><span class="co">  Given an array of numbers `x`, and the desired min and max values, `cmin` and</span></span>
+<span id="cb9-11"><a href="#cb9-11"></a><span class="co">  `cmax` respectively, and optionally a `dtype` that defaults to `uint8`, clamp</span></span>
+<span id="cb9-12"><a href="#cb9-12"></a><span class="co">  the values of `x` to between `cmin` and `cmax` (i.e., if a pixel is less than</span></span>
+<span id="cb9-13"><a href="#cb9-13"></a><span class="co">  `cmin`, it will be treated as being equal to `cmin`) and scale the values</span></span>
+<span id="cb9-14"><a href="#cb9-14"></a><span class="co">  linearly to the full range supported by `dtype`. When `dtype` is `np.uint8`,</span></span>
+<span id="cb9-15"><a href="#cb9-15"></a><span class="co">  e.g., the output will have values between 0 (originally `cmin`) and 255</span></span>
+<span id="cb9-16"><a href="#cb9-16"></a><span class="co">  (originally `cmax`).</span></span>
+<span id="cb9-17"><a href="#cb9-17"></a><span class="co">  &quot;&quot;&quot;</span></span>
+<span id="cb9-18"><a href="#cb9-18"></a>  <span class="co"># clamp x between cmin and cmax</span></span>
+<span id="cb9-19"><a href="#cb9-19"></a>  x[x <span class="op">&lt;</span> cmin] <span class="op">=</span> cmin</span>
+<span id="cb9-20"><a href="#cb9-20"></a>  x[x <span class="op">&gt;</span> cmax] <span class="op">=</span> cmax</span>
+<span id="cb9-21"><a href="#cb9-21"></a>  <span class="co"># map [cmin, cmax] to [0, 2**depth-1-eps] linearly</span></span>
+<span id="cb9-22"><a href="#cb9-22"></a>  maxval <span class="op">=</span> <span class="dv">2</span><span class="op">**</span>(<span class="dv">8</span> <span class="op">*</span> dtype().itemsize) <span class="op">-</span> <span class="fl">1e-3</span></span>
+<span id="cb9-23"><a href="#cb9-23"></a>  slope <span class="op">=</span> (maxval <span class="op">-</span> <span class="fl">1.0</span>) <span class="op">/</span> (cmax <span class="op">-</span> cmin)</span>
+<span id="cb9-24"><a href="#cb9-24"></a>  ret <span class="op">=</span> slope <span class="op">*</span> (x <span class="op">-</span> cmin) <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb9-25"><a href="#cb9-25"></a>  <span class="cf">return</span> (ret).astype(dtype)</span>
+<span id="cb9-26"><a href="#cb9-26"></a></span>
+<span id="cb9-27"><a href="#cb9-27"></a></span>
+<span id="cb9-28"><a href="#cb9-28"></a><span class="kw">def</span> toPng(scaled: np.ndarray, fname: <span class="bu">str</span>):</span>
+<span id="cb9-29"><a href="#cb9-29"></a>  <span class="co">&quot;&quot;&quot;Write a uint8 array `scaled` to a PNG file `fname`&quot;&quot;&quot;</span></span>
+<span id="cb9-30"><a href="#cb9-30"></a>  <span class="im">from</span> PIL <span class="im">import</span> Image</span>
+<span id="cb9-31"><a href="#cb9-31"></a>  newimage <span class="op">=</span> Image.new(<span class="st">&#39;L&#39;</span>, (scaled.shape[<span class="dv">1</span>], scaled.shape[<span class="dv">0</span>]))  <span class="co"># type, (width, height)</span></span>
+<span id="cb9-32"><a href="#cb9-32"></a>  newimage.putdata(scaled.ravel())</span>
+<span id="cb9-33"><a href="#cb9-33"></a>  newimage.save(fname)</span>
+<span id="cb9-34"><a href="#cb9-34"></a></span>
+<span id="cb9-35"><a href="#cb9-35"></a></span>
+<span id="cb9-36"><a href="#cb9-36"></a><span class="kw">def</span> texToPng(tex: np.ndarray, fname: <span class="bu">str</span>, quantiles<span class="op">=</span><span class="va">None</span>, borderFractions<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb9-37"><a href="#cb9-37"></a>  <span class="co">&quot;&quot;&quot;Quantile a texture-shaded array and write it to 8-bit PNG</span></span>
+<span id="cb9-38"><a href="#cb9-38"></a></span>
+<span id="cb9-39"><a href="#cb9-39"></a><span class="co">  Given `tex`, a 2D array, and a `fname` path to a PNG file, and optionally a</span></span>
+<span id="cb9-40"><a href="#cb9-40"></a><span class="co">  2-list `quantiles` (defaults to [0.01, 0.99], i.e., 1% and 99%), clamp the</span></span>
+<span id="cb9-41"><a href="#cb9-41"></a><span class="co">  array to the quantile-values and write to a PNG. If `borderFractions`, also a</span></span>
+<span id="cb9-42"><a href="#cb9-42"></a><span class="co">  2-list, is given, </span></span>
+<span id="cb9-43"><a href="#cb9-43"></a></span>
+<span id="cb9-44"><a href="#cb9-44"></a><span class="co">  `[np.round(total * frac) for total, frac in zip(tex.shape, borderFractions)]`</span></span>
+<span id="cb9-45"><a href="#cb9-45"></a><span class="co">  </span></span>
+<span id="cb9-46"><a href="#cb9-46"></a><span class="co">  pixels on either side of the border in each dimension are ignored in</span></span>
+<span id="cb9-47"><a href="#cb9-47"></a><span class="co">  computing the quantiles.</span></span>
+<span id="cb9-48"><a href="#cb9-48"></a><span class="co">  &quot;&quot;&quot;</span></span>
+<span id="cb9-49"><a href="#cb9-49"></a>  <span class="cf">if</span> quantiles <span class="kw">is</span> <span class="va">None</span>:</span>
+<span id="cb9-50"><a href="#cb9-50"></a>    quantiles <span class="op">=</span> [<span class="fl">0.01</span>, <span class="fl">0.99</span>]</span>
+<span id="cb9-51"><a href="#cb9-51"></a>  <span class="cf">assert</span> <span class="bu">all</span>([x <span class="op">&gt;=</span> <span class="dv">0</span> <span class="kw">and</span> x <span class="op">&lt;=</span> <span class="dv">1</span> <span class="cf">for</span> x <span class="kw">in</span> quantiles])</span>
+<span id="cb9-52"><a href="#cb9-52"></a>  <span class="cf">if</span> borderFractions <span class="kw">is</span> <span class="va">None</span>:</span>
+<span id="cb9-53"><a href="#cb9-53"></a>    minmax <span class="op">=</span> np.quantile(tex.ravel(), quantiles)</span>
+<span id="cb9-54"><a href="#cb9-54"></a>  <span class="cf">else</span>:</span>
+<span id="cb9-55"><a href="#cb9-55"></a>    <span class="cf">assert</span> <span class="bu">all</span>([x <span class="op">&gt;=</span> <span class="dv">0</span> <span class="kw">and</span> x <span class="op">&lt;</span> <span class="dv">1</span> <span class="cf">for</span> x <span class="kw">in</span> borderFractions])</span>
+<span id="cb9-56"><a href="#cb9-56"></a>    border <span class="op">=</span> [<span class="bu">int</span>(np.<span class="bu">round</span>(total <span class="op">*</span> frac)) <span class="cf">for</span> total, frac <span class="kw">in</span> <span class="bu">zip</span>(tex.shape, borderFractions)]</span>
+<span id="cb9-57"><a href="#cb9-57"></a>    slices <span class="op">=</span> <span class="bu">tuple</span>(<span class="bu">slice</span>(p, <span class="op">-</span>p <span class="cf">if</span> p <span class="op">&gt;</span> <span class="dv">0</span> <span class="cf">else</span> <span class="va">None</span>) <span class="cf">for</span> p <span class="kw">in</span> border)</span>
+<span id="cb9-58"><a href="#cb9-58"></a>    minmax <span class="op">=</span> np.quantile(tex[slices].ravel(), quantiles)</span>
+<span id="cb9-59"><a href="#cb9-59"></a></span>
+<span id="cb9-60"><a href="#cb9-60"></a>  scaled <span class="op">=</span> touint(tex, minmax[<span class="dv">0</span>], minmax[<span class="dv">1</span>], np.uint8)</span>
+<span id="cb9-61"><a href="#cb9-61"></a>  toPng(scaled, fname)</span>
+<span id="cb9-62"><a href="#cb9-62"></a>  <span class="cf">return</span> scaled</span>
+<span id="cb9-63"><a href="#cb9-63"></a></span>
+<span id="cb9-64"><a href="#cb9-64"></a></span>
+<span id="cb9-65"><a href="#cb9-65"></a><span class="co"># Adapted from EddyTheB, http://gis.stackexchange.com/a/57006/8623</span></span>
+<span id="cb9-66"><a href="#cb9-66"></a><span class="kw">def</span> getGeoInfo(filename):</span>
+<span id="cb9-67"><a href="#cb9-67"></a>  <span class="co">&quot;Extract a bunch of GDAL-specific metadata from a file&quot;</span></span>
+<span id="cb9-68"><a href="#cb9-68"></a>  source <span class="op">=</span> gdal.Open(filename, gdalconst.GA_ReadOnly)</span>
+<span id="cb9-69"><a href="#cb9-69"></a>  noDataValue <span class="op">=</span> source.GetRasterBand(<span class="dv">1</span>).GetNoDataValue()</span>
+<span id="cb9-70"><a href="#cb9-70"></a>  xsize <span class="op">=</span> source.RasterXSize</span>
+<span id="cb9-71"><a href="#cb9-71"></a>  ysize <span class="op">=</span> source.RasterYSize</span>
+<span id="cb9-72"><a href="#cb9-72"></a>  geoTransform <span class="op">=</span> source.GetGeoTransform()</span>
+<span id="cb9-73"><a href="#cb9-73"></a>  proj <span class="op">=</span> osr.SpatialReference()</span>
+<span id="cb9-74"><a href="#cb9-74"></a>  proj.ImportFromWkt(source.GetProjectionRef())</span>
+<span id="cb9-75"><a href="#cb9-75"></a>  dtype <span class="op">=</span> source.GetRasterBand(<span class="dv">1</span>).DataType</span>
+<span id="cb9-76"><a href="#cb9-76"></a>  dtype <span class="op">=</span> gdal.GetDataTypeName(dtype)</span>
+<span id="cb9-77"><a href="#cb9-77"></a>  <span class="cf">return</span> noDataValue, xsize, ysize, geoTransform, proj, dtype</span>
+<span id="cb9-78"><a href="#cb9-78"></a></span>
+<span id="cb9-79"><a href="#cb9-79"></a></span>
+<span id="cb9-80"><a href="#cb9-80"></a><span class="kw">def</span> createGeoTiff(filename,</span>
+<span id="cb9-81"><a href="#cb9-81"></a>                  array,</span>
+<span id="cb9-82"><a href="#cb9-82"></a>                  driver,</span>
+<span id="cb9-83"><a href="#cb9-83"></a>                  noDataValue,</span>
+<span id="cb9-84"><a href="#cb9-84"></a>                  xsize,</span>
+<span id="cb9-85"><a href="#cb9-85"></a>                  ysize,</span>
+<span id="cb9-86"><a href="#cb9-86"></a>                  geoTransform,</span>
+<span id="cb9-87"><a href="#cb9-87"></a>                  proj,</span>
+<span id="cb9-88"><a href="#cb9-88"></a>                  dtype,</span>
+<span id="cb9-89"><a href="#cb9-89"></a>                  numBands<span class="op">=</span><span class="dv">1</span>):</span>
+<span id="cb9-90"><a href="#cb9-90"></a>  <span class="co">&quot;Given an array, and a bunch of GDAL metadata, create a GeoTIFF&quot;</span></span>
+<span id="cb9-91"><a href="#cb9-91"></a>  <span class="co"># Set up the dataset</span></span>
+<span id="cb9-92"><a href="#cb9-92"></a>  DataSet <span class="op">=</span> driver.Create(filename, xsize, ysize, numBands, dtype, options<span class="op">=</span>[<span class="st">&#39;COMPRESS=LZW&#39;</span>])</span>
+<span id="cb9-93"><a href="#cb9-93"></a>  DataSet.SetGeoTransform(geoTransform)</span>
+<span id="cb9-94"><a href="#cb9-94"></a>  DataSet.SetProjection(proj.ExportToWkt())</span>
+<span id="cb9-95"><a href="#cb9-95"></a>  <span class="co"># Write the array</span></span>
+<span id="cb9-96"><a href="#cb9-96"></a>  <span class="cf">if</span> numBands <span class="op">==</span> <span class="dv">1</span>:</span>
+<span id="cb9-97"><a href="#cb9-97"></a>    DataSet.GetRasterBand(numBands).WriteArray(array)</span>
+<span id="cb9-98"><a href="#cb9-98"></a>    <span class="cf">if</span> noDataValue <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb9-99"><a href="#cb9-99"></a>      DataSet.GetRasterBand(numBands).SetNoDataValue(noDataValue)</span>
+<span id="cb9-100"><a href="#cb9-100"></a>  <span class="cf">else</span>:</span>
+<span id="cb9-101"><a href="#cb9-101"></a>    <span class="cf">for</span> bid <span class="kw">in</span> <span class="bu">range</span>(numBands):</span>
+<span id="cb9-102"><a href="#cb9-102"></a>      DataSet.GetRasterBand(bid <span class="op">+</span> <span class="dv">1</span>).WriteArray(array[:, :, bid])</span>
+<span id="cb9-103"><a href="#cb9-103"></a>      <span class="cf">if</span> noDataValue <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>:</span>
+<span id="cb9-104"><a href="#cb9-104"></a>        DataSet.GetRasterBand(bid <span class="op">+</span> <span class="dv">1</span>).SetNoDataValue(noDataValue)</span>
+<span id="cb9-105"><a href="#cb9-105"></a>  <span class="cf">return</span> filename</span>
+<span id="cb9-106"><a href="#cb9-106"></a></span>
+<span id="cb9-107"><a href="#cb9-107"></a></span>
+<span id="cb9-108"><a href="#cb9-108"></a><span class="cf">if</span> <span class="va">__name__</span> <span class="op">==</span> <span class="st">&#39;__main__&#39;</span>:</span>
+<span id="cb9-109"><a href="#cb9-109"></a>  tex <span class="op">=</span> np.load(<span class="st">&#39;merged.tif.npy.tex.npy&#39;</span>)</span>
+<span id="cb9-110"><a href="#cb9-110"></a>  scaled <span class="op">=</span> texToPng(tex, <span class="st">&#39;scaled.png&#39;</span>, quantiles<span class="op">=</span>[.<span class="dv">01</span>, <span class="fl">.99</span>], borderFractions<span class="op">=</span>[<span class="fl">1e-2</span>, <span class="fl">1e-2</span>])</span>
+<span id="cb9-111"><a href="#cb9-111"></a></span>
+<span id="cb9-112"><a href="#cb9-112"></a>  <span class="co"># save as GeoTiff</span></span>
+<span id="cb9-113"><a href="#cb9-113"></a>  driver <span class="op">=</span> gdal.GetDriverByName(<span class="st">&#39;GTiff&#39;</span>)</span>
+<span id="cb9-114"><a href="#cb9-114"></a>  noDataValue, xsize, ysize, geoTransform, proj, dtype <span class="op">=</span> getGeoInfo(<span class="st">&#39;merged.tif&#39;</span>)</span>
+<span id="cb9-115"><a href="#cb9-115"></a>  createGeoTiff(<span class="st">&#39;scaled.tif&#39;</span>, scaled, driver, <span class="dv">0</span>, xsize, ysize, geoTransform, proj,</span>
+<span id="cb9-116"><a href="#cb9-116"></a>                gdalconst.GDT_Byte)</span>
+<span id="cb9-117"><a href="#cb9-117"></a>  <span class="bu">print</span>(<span class="st">&#39;done exporting texshaded PNG and GeoTIFF&#39;</span>)</span>
+<span id="cb9-118"><a href="#cb9-118"></a></span>
+<span id="cb9-119"><a href="#cb9-119"></a>  <span class="co"># write original DEM too</span></span>
+<span id="cb9-120"><a href="#cb9-120"></a>  tex <span class="op">=</span> np.load(<span class="st">&#39;merged.tif.npy&#39;</span>)</span>
+<span id="cb9-121"><a href="#cb9-121"></a>  toPng(touint(tex, np.<span class="bu">min</span>(tex), np.<span class="bu">max</span>(tex), np.uint8), <span class="st">&#39;orig.png&#39;</span>)</span></code></pre></div>
+<p>This next command resizes the output images so I can include them in this repo.</p>
 <pre><code>for i in orig.png scaled.png; do convert -filter Mitchell -sampling-factor 1x1 -quality 90 -resize 2048 $i $i.small.png; done</code></pre>
 <h3 id="original">Original</h3>
 <p><img src="orig.png.small.png" alt="original downsampled" /></p>
@@ -612,18 +684,19 @@ Band 1 Block=10801x1 Type=Int16, ColorInterp=Gray
 <span id="cb11-3"><a href="#cb11-3"></a><span class="im">from</span> mpmath <span class="im">import</span> hyper</span>
 <span id="cb11-4"><a href="#cb11-4"></a><span class="im">import</span> numpy.fft <span class="im">as</span> fft</span>
 <span id="cb11-5"><a href="#cb11-5"></a><span class="im">import</span> pylab <span class="im">as</span> plt</span>
-<span id="cb11-6"><a href="#cb11-6"></a>plt.style.use(<span class="st">&#39;ggplot&#39;</span>)</span>
-<span id="cb11-7"><a href="#cb11-7"></a></span>
+<span id="cb11-6"><a href="#cb11-6"></a></span>
+<span id="cb11-7"><a href="#cb11-7"></a>plt.style.use(<span class="st">&#39;ggplot&#39;</span>)</span>
 <span id="cb11-8"><a href="#cb11-8"></a></span>
-<span id="cb11-9"><a href="#cb11-9"></a><span class="kw">def</span> spatial(r, a):</span>
-<span id="cb11-10"><a href="#cb11-10"></a>  <span class="co">&quot;Evaluate L(r), proportional to the Fourier transform of |f|**α&quot;</span></span>
-<span id="cb11-11"><a href="#cb11-11"></a>  <span class="cf">return</span> <span class="bu">float</span>(hyper((<span class="fl">0.5</span> <span class="op">*</span> a <span class="op">+</span> <span class="dv">1</span>,), (<span class="fl">1.0</span>, <span class="fl">0.5</span> <span class="op">*</span> a <span class="op">+</span> <span class="dv">2</span>), <span class="fl">-0.25</span> <span class="op">*</span> (r <span class="op">*</span> np.pi)<span class="op">**</span><span class="dv">2</span>))</span>
-<span id="cb11-12"><a href="#cb11-12"></a></span>
+<span id="cb11-9"><a href="#cb11-9"></a></span>
+<span id="cb11-10"><a href="#cb11-10"></a><span class="kw">def</span> spatial(r, a):</span>
+<span id="cb11-11"><a href="#cb11-11"></a>  <span class="co">&quot;Evaluate L(r), proportional to the Fourier transform of |f|**α&quot;</span></span>
+<span id="cb11-12"><a href="#cb11-12"></a>  <span class="cf">return</span> <span class="bu">float</span>(hyper((<span class="fl">0.5</span> <span class="op">*</span> a <span class="op">+</span> <span class="dv">1</span>,), (<span class="fl">1.0</span>, <span class="fl">0.5</span> <span class="op">*</span> a <span class="op">+</span> <span class="dv">2</span>), <span class="fl">-0.25</span> <span class="op">*</span> (r <span class="op">*</span> np.pi)<span class="op">**</span><span class="dv">2</span>))</span>
 <span id="cb11-13"><a href="#cb11-13"></a></span>
-<span id="cb11-14"><a href="#cb11-14"></a>xmat, ymat <span class="op">=</span> np.meshgrid(np.arange(<span class="op">-</span><span class="dv">100</span>, <span class="dv">100</span>), np.arange(<span class="op">-</span><span class="dv">100</span>, <span class="dv">100</span>))</span>
-<span id="cb11-15"><a href="#cb11-15"></a>rmat <span class="op">=</span> np.sqrt(xmat<span class="op">**</span><span class="dv">2</span> <span class="op">+</span> ymat<span class="op">**</span><span class="dv">2</span>)</span>
-<span id="cb11-16"><a href="#cb11-16"></a>alpha <span class="op">=</span> <span class="fl">0.8</span></span>
-<span id="cb11-17"><a href="#cb11-17"></a>h <span class="op">=</span> np.vectorize(<span class="kw">lambda</span> r: spatial(r, alpha))(rmat)</span></code></pre></div>
+<span id="cb11-14"><a href="#cb11-14"></a></span>
+<span id="cb11-15"><a href="#cb11-15"></a>xmat, ymat <span class="op">=</span> np.meshgrid(np.arange(<span class="op">-</span><span class="dv">100</span>, <span class="dv">100</span>), np.arange(<span class="op">-</span><span class="dv">100</span>, <span class="dv">100</span>))</span>
+<span id="cb11-16"><a href="#cb11-16"></a>rmat <span class="op">=</span> np.sqrt(xmat<span class="op">**</span><span class="dv">2</span> <span class="op">+</span> ymat<span class="op">**</span><span class="dv">2</span>)</span>
+<span id="cb11-17"><a href="#cb11-17"></a>alpha <span class="op">=</span> <span class="fl">0.8</span></span>
+<span id="cb11-18"><a href="#cb11-18"></a>h <span class="op">=</span> np.vectorize(<span class="kw">lambda</span> r: spatial(r, alpha))(rmat)</span></code></pre></div>
 <p>Above we use the fabulous <a href="http://mpmath.org/"><code>mpmath</code></a> package—a pure-Python arbitrary-precision package with extensive support for special functions, quadrature integration, linear algebra, etc., started by Fredrik Johansson in 2007 (when he was a teenager)—to compute the generalized hypergeometric function. Next, we'd like to visualize its Fourier transform—hopefully we see something that looks like \(|f|^{0.8}\).</p>
 <div class="sourceCode" id="cb12"><pre class="sourceCode py"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1"></a><span class="co"># export math-hankel.py</span></span>
 <span id="cb12-2"><a href="#cb12-2"></a><span class="kw">def</span> F2cent(arr):</span>
@@ -690,21 +763,22 @@ Band 1 Block=10801x1 Type=Int16, ColorInterp=Gray
 <p>$$y = F^{-1}[F[x] ⋅ |\vec f|^α],$$ but \(|\vec f|^α\) includes the <em>corners</em> of the frequency domain, not the radial pattern we see from the circular bull's-eye chart above, where the corners in the frequency domain get zero weight. We might use \(L(r)\) nonetheless and accept the infidelity to the texture shading algorithm, but we don't need to. If we decimate the spatial-domain filter \(L(r)\) by two, then we effectively get the middle-half of its frequency response, which will be \(∝|f|^α\) all the way out to its edges. The Scipy ecosystem provides several ways to <a href="https://docs.scipy.org/doc/scipy/reference/signal.html#filter-design">design halfband filters</a>. A simple example to demonstrate the idea will suffice: design an 8th order low-pass Butterworth filter and apply it along rows and columns of the spatial-domain filter, then downsample the result (throw away every other row/column):</p>
 <div class="sourceCode" id="cb13"><pre class="sourceCode py"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1"></a><span class="co"># export math-hankel.py</span></span>
 <span id="cb13-2"><a href="#cb13-2"></a><span class="im">import</span> scipy.signal <span class="im">as</span> sig</span>
-<span id="cb13-3"><a href="#cb13-3"></a>lpf <span class="op">=</span> sig.iirfilter(<span class="dv">8</span>, <span class="fl">0.5</span>, btype<span class="op">=</span><span class="st">&#39;lowpass&#39;</span>, ftype<span class="op">=</span><span class="st">&#39;butter&#39;</span>)</span>
-<span id="cb13-4"><a href="#cb13-4"></a>hiir <span class="op">=</span> sig.filtfilt(<span class="op">*</span>lpf, sig.filtfilt(<span class="op">*</span>lpf, h, axis<span class="op">=</span><span class="dv">0</span>), axis<span class="op">=</span><span class="dv">1</span>)</span>
-<span id="cb13-5"><a href="#cb13-5"></a></span>
-<span id="cb13-6"><a href="#cb13-6"></a>lpfplots <span class="op">=</span> plotF2cent(hiir)</span>
-<span id="cb13-7"><a href="#cb13-7"></a>decplots <span class="op">=</span> plotF2cent(hiir[:<span class="op">-</span><span class="dv">1</span>:<span class="dv">2</span>, :<span class="op">-</span><span class="dv">1</span>:<span class="dv">2</span>])</span>
-<span id="cb13-8"><a href="#cb13-8"></a></span>
-<span id="cb13-9"><a href="#cb13-9"></a>lpfplots[<span class="dv">1</span>].set_title(<span class="st">&#39;LPF[L(r)]&#39;</span>)</span>
-<span id="cb13-10"><a href="#cb13-10"></a>lpfplots[<span class="dv">2</span>].set_title(<span class="st">&#39;F[LPF[L(r)]]&#39;</span>)</span>
-<span id="cb13-11"><a href="#cb13-11"></a>lpfplots[<span class="dv">0</span>].savefig(<span class="st">&#39;lpf-hankel.png&#39;</span>, dpi<span class="op">=</span><span class="dv">300</span>, bbox_inches<span class="op">=</span><span class="st">&#39;tight&#39;</span>)</span>
-<span id="cb13-12"><a href="#cb13-12"></a>lpfplots[<span class="dv">0</span>].savefig(<span class="st">&#39;lpf-hankel.svg&#39;</span>, bbox_inches<span class="op">=</span><span class="st">&#39;tight&#39;</span>)</span>
-<span id="cb13-13"><a href="#cb13-13"></a></span>
-<span id="cb13-14"><a href="#cb13-14"></a>decplots[<span class="dv">1</span>].set_title(<span class="st">&#39;HB[L(r)]&#39;</span>)</span>
-<span id="cb13-15"><a href="#cb13-15"></a>decplots[<span class="dv">2</span>].set_title(<span class="st">&#39;F[HB[L(r)]]&#39;</span>)</span>
-<span id="cb13-16"><a href="#cb13-16"></a>decplots[<span class="dv">0</span>].savefig(<span class="st">&#39;hb-hankel.png&#39;</span>, dpi<span class="op">=</span><span class="dv">300</span>, bbox_inches<span class="op">=</span><span class="st">&#39;tight&#39;</span>)</span>
-<span id="cb13-17"><a href="#cb13-17"></a>decplots[<span class="dv">0</span>].savefig(<span class="st">&#39;hb-hankel.svg&#39;</span>, bbox_inches<span class="op">=</span><span class="st">&#39;tight&#39;</span>)</span></code></pre></div>
+<span id="cb13-3"><a href="#cb13-3"></a></span>
+<span id="cb13-4"><a href="#cb13-4"></a>lpf <span class="op">=</span> sig.iirfilter(<span class="dv">8</span>, <span class="fl">0.5</span>, btype<span class="op">=</span><span class="st">&#39;lowpass&#39;</span>, ftype<span class="op">=</span><span class="st">&#39;butter&#39;</span>)</span>
+<span id="cb13-5"><a href="#cb13-5"></a>hiir <span class="op">=</span> sig.filtfilt(<span class="op">*</span>lpf, sig.filtfilt(<span class="op">*</span>lpf, h, axis<span class="op">=</span><span class="dv">0</span>), axis<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb13-6"><a href="#cb13-6"></a></span>
+<span id="cb13-7"><a href="#cb13-7"></a>lpfplots <span class="op">=</span> plotF2cent(hiir)</span>
+<span id="cb13-8"><a href="#cb13-8"></a>decplots <span class="op">=</span> plotF2cent(hiir[:<span class="op">-</span><span class="dv">1</span>:<span class="dv">2</span>, :<span class="op">-</span><span class="dv">1</span>:<span class="dv">2</span>])</span>
+<span id="cb13-9"><a href="#cb13-9"></a></span>
+<span id="cb13-10"><a href="#cb13-10"></a>lpfplots[<span class="dv">1</span>].set_title(<span class="st">&#39;LPF[L(r)]&#39;</span>)</span>
+<span id="cb13-11"><a href="#cb13-11"></a>lpfplots[<span class="dv">2</span>].set_title(<span class="st">&#39;F[LPF[L(r)]]&#39;</span>)</span>
+<span id="cb13-12"><a href="#cb13-12"></a>lpfplots[<span class="dv">0</span>].savefig(<span class="st">&#39;lpf-hankel.png&#39;</span>, dpi<span class="op">=</span><span class="dv">300</span>, bbox_inches<span class="op">=</span><span class="st">&#39;tight&#39;</span>)</span>
+<span id="cb13-13"><a href="#cb13-13"></a>lpfplots[<span class="dv">0</span>].savefig(<span class="st">&#39;lpf-hankel.svg&#39;</span>, bbox_inches<span class="op">=</span><span class="st">&#39;tight&#39;</span>)</span>
+<span id="cb13-14"><a href="#cb13-14"></a></span>
+<span id="cb13-15"><a href="#cb13-15"></a>decplots[<span class="dv">1</span>].set_title(<span class="st">&#39;HB[L(r)]&#39;</span>)</span>
+<span id="cb13-16"><a href="#cb13-16"></a>decplots[<span class="dv">2</span>].set_title(<span class="st">&#39;F[HB[L(r)]]&#39;</span>)</span>
+<span id="cb13-17"><a href="#cb13-17"></a>decplots[<span class="dv">0</span>].savefig(<span class="st">&#39;hb-hankel.png&#39;</span>, dpi<span class="op">=</span><span class="dv">300</span>, bbox_inches<span class="op">=</span><span class="st">&#39;tight&#39;</span>)</span>
+<span id="cb13-18"><a href="#cb13-18"></a>decplots[<span class="dv">0</span>].savefig(<span class="st">&#39;hb-hankel.svg&#39;</span>, bbox_inches<span class="op">=</span><span class="st">&#39;tight&#39;</span>)</span></code></pre></div>
 <p>The results are positive: while this filtering process can certainly be improved, we have obtained a spatial-domain filter that closely-approximates the fractional-Laplacian frequency-domain operator needed by the texture shading algorithm.</p>
 <p><img src="lpf-hankel.png" alt="Low-pass-filtered version of our initial spatial-domain-created filter" /></p>
 <p>Above: low-pass-filtered version of our initial spatial-domain-created filter.</p>

@@ -2,6 +2,7 @@
 
 import texshade
 import numpy as np
+
 fname = 'merged.tif.npy'
 
 arr = np.load(fname)
