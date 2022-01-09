@@ -12,7 +12,7 @@ Nwidth = 500
 
 tex = np.lib.format.open_memmap('mmap-tex.npy', mode='w+', dtype=np.float64, shape=arr.shape)
 
-texshadeSpatial(arr, alpha, Nwidth, out=tex, size=[2000, 2000])
+texshadeSpatial(arr, alpha=alpha, nDiameter=Nwidth, out=tex, size=[1500, 2000])
 
 postprocess.texToPng(
     tex,

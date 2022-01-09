@@ -4,7 +4,7 @@ import scipy.fft as sf
 import numpy as np
 from nextprod import nextprod
 from ols import ols
-from typing import List, Union, Optional
+from typing import List, Optional
 
 
 def texshadeFFT(x: np.ndarray, alpha: float) -> np.ndarray:
@@ -66,9 +66,9 @@ def makeFilter(shape: List[int], alpha: float, dtype=float) -> np.ndarray:
 
 def texshadeSpatial(
     x: np.ndarray,
-    alpha: float,
-    # halfHankel args
-    nDiameterOrFilter: Union[int, np.ndarray],
+    alpha: Optional[float] = None,
+    nDiameter: Optional[int] = None,
+    filter: Optional[np.ndarray] = None,
     # ols kwargs
     size=None,
     nfft=None,
@@ -133,7 +133,11 @@ def texshadeSpatial(
   Numpy will perform a conversion, which might be expensive. If provided, this
   is returned. If not specified, a new array is allocated, filled, and returned.
   """
-  h = makeFilter([nDiameterOrFilter], alpha,
-                 x.dtype) if type(nDiameterOrFilter) == int else nDiameterOrFilter
+  if filter:
+    h = filter
+  elif alpha and nDiameter:
+    h = makeFilter([nDiameter], alpha, x.dtype)
+  else:
+    raise ValueError("either (alpha and nDiameter) or filter needed")
 
   return ols(x, h, size=size, nfft=nfft, out=out)
