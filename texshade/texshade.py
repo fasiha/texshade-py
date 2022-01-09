@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 
-import scipy.fftpack as scifft
+import scipy.fft as sf
 import numpy as np
 from nextprod import nextprod
+from ols import ols
+from typing import List, Union, Optional
 
 
 def texshadeFFT(x: np.ndarray, alpha: float) -> np.ndarray:
@@ -37,27 +39,16 @@ def texshadeFFT(x: np.ndarray, alpha: float) -> np.ndarray:
   Nyx = [nextprod([2, 3, 5, 7], x) for x in x.shape]
 
   # Generate filter in the frequency domain
-  fy = scifft.rfftfreq(Nyx[0])[:, np.newaxis].astype(x.dtype)
-  fx = scifft.rfftfreq(Nyx[1])[np.newaxis, :].astype(x.dtype)
+  fy = sf.fftfreq(Nyx[0])[:, np.newaxis].astype(x.dtype)
+  fx = sf.rfftfreq(Nyx[1])[np.newaxis, :].astype(x.dtype)
   H2 = (fx**2 + fy**2)**(alpha / 2.0)
 
-  # Define forward and backwards transforms
-  rfft2 = lambda x: scifft.rfft(scifft.rfft(x, Nyx[1], 1, True), Nyx[0], 0, True)
-  irfft2 = lambda X: scifft.irfft(scifft.irfft(X, axis=0, overwrite_x=True), overwrite_x=True)
-
   # Compute the FFT of the input and apply the filter
-  xr = rfft2(x) * H2
+  xr = sf.rfft2(x, s=Nyx) * H2
   H2 = None  # potentially trigger GC here to reclaim H2's memory
-  xr = irfft2(xr)
+  xr = sf.irfft2(xr)
   # Return the same size as input
   return xr[:x.shape[0], :x.shape[1]]
-
-
-from ols import ols
-
-from typing import List, Union
-
-import scipy.fft as sf
 
 
 def makeFilter(shape: List[int], alpha: float, dtype=float) -> np.ndarray:
@@ -65,36 +56,12 @@ def makeFilter(shape: List[int], alpha: float, dtype=float) -> np.ndarray:
   if len(shape) == 1:
     shape = [shape[0], shape[0]]
 
-  Nyx = [nextprod([2, 3, 5, 7], x) for x in shape]
-
   # Generate filter in the frequency domain
-  fy = sf.fftfreq(Nyx[0])[:, np.newaxis].astype(dtype)
-  fx = sf.rfftfreq(Nyx[1])[np.newaxis, :].astype(dtype)
+  fy = sf.fftfreq(shape[0])[:, np.newaxis].astype(dtype)
+  fx = sf.rfftfreq(shape[1])[np.newaxis, :].astype(dtype)
   H2 = (fx**2 + fy**2)**(alpha / 2.0)
 
-  xr = sf.irfft2(H2)
-  # Return the same size as input
-  return sf.ifftshift(xr[:shape[0], :shape[1]])
-
-
-def makeFilterBroken(shape: List[int], alpha: float, dtype=float) -> np.ndarray:
-  assert 1 <= len(shape) <= 2, "shape must be one or two elements"
-  if len(shape) == 1:
-    shape = [shape[0], shape[0]]
-
-  Nyx = [nextprod([2, 3, 5, 7], x) for x in shape]
-
-  # Generate filter in the frequency domain
-  fy = scifft.rfftfreq(Nyx[0])[:, np.newaxis].astype(dtype)
-  fx = scifft.rfftfreq(Nyx[1])[np.newaxis, :].astype(dtype)
-  H2 = (fx**2 + fy**2)**(alpha / 2.0)
-
-  # Define and apply the backwards transform
-  irfft2 = lambda X: scifft.irfft(scifft.irfft(X, axis=0, overwrite_x=True), overwrite_x=True)
-  xr = irfft2(H2)
-  # Return the same size as input
-  return scifft.ifftshift(xr[:shape[0], :shape[1]])
-  rfft2 = lambda x: scifft.rfft(scifft.rfft(x, Nyx[1], 1, True), Nyx[0], 0, True)
+  return sf.ifftshift(sf.irfft2(H2))
 
 
 def texshadeSpatial(
