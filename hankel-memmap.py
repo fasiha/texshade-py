@@ -9,11 +9,10 @@ arr = np.load(fname, mmap_mode='r')
 
 alpha = 0.8
 Nwidth = 500
-Nhalfband = 128
 
 tex = np.lib.format.open_memmap('mmap-tex.npy', mode='w+', dtype=np.float64, shape=arr.shape)
 
-texshadeSpatial(arr, alpha, Nwidth, hbTaps=Nhalfband, out=tex, size=[2000, 2000])
+texshadeSpatial(arr, alpha, Nwidth, out=tex, size=[2000, 2000])
 
 postprocess.texToPng(
     tex,

@@ -51,20 +51,57 @@ def texshadeFFT(x: np.ndarray, alpha: float) -> np.ndarray:
   xr = irfft2(xr)
   # Return the same size as input
   return xr[:x.shape[0], :x.shape[1]]
+
+
 from ols import ols
-from .hankel import halfHankel
+
+from typing import List, Union
+
+import scipy.fft as sf
+
+
+def makeFilter(shape: List[int], alpha: float, dtype=float) -> np.ndarray:
+  assert 1 <= len(shape) <= 2, "shape must be one or two elements"
+  if len(shape) == 1:
+    shape = [shape[0], shape[0]]
+
+  Nyx = [nextprod([2, 3, 5, 7], x) for x in shape]
+
+  # Generate filter in the frequency domain
+  fy = sf.fftfreq(Nyx[0])[:, np.newaxis].astype(dtype)
+  fx = sf.rfftfreq(Nyx[1])[np.newaxis, :].astype(dtype)
+  H2 = (fx**2 + fy**2)**(alpha / 2.0)
+
+  xr = sf.irfft2(H2)
+  # Return the same size as input
+  return sf.ifftshift(xr[:shape[0], :shape[1]])
+
+
+def makeFilterBroken(shape: List[int], alpha: float, dtype=float) -> np.ndarray:
+  assert 1 <= len(shape) <= 2, "shape must be one or two elements"
+  if len(shape) == 1:
+    shape = [shape[0], shape[0]]
+
+  Nyx = [nextprod([2, 3, 5, 7], x) for x in shape]
+
+  # Generate filter in the frequency domain
+  fy = scifft.rfftfreq(Nyx[0])[:, np.newaxis].astype(dtype)
+  fx = scifft.rfftfreq(Nyx[1])[np.newaxis, :].astype(dtype)
+  H2 = (fx**2 + fy**2)**(alpha / 2.0)
+
+  # Define and apply the backwards transform
+  irfft2 = lambda X: scifft.irfft(scifft.irfft(X, axis=0, overwrite_x=True), overwrite_x=True)
+  xr = irfft2(H2)
+  # Return the same size as input
+  return scifft.ifftshift(xr[:shape[0], :shape[1]])
+  rfft2 = lambda x: scifft.rfft(scifft.rfft(x, Nyx[1], 1, True), Nyx[0], 0, True)
 
 
 def texshadeSpatial(
     x: np.ndarray,
     alpha: float,
     # halfHankel args
-    nDiameter: int,
-    # halfHankel kwargs
-    interpMethod=True,
-    sampleSpacing=None,
-    hbTaps=128,
-    hbTransitionWidth=0.03,
+    nDiameterOrFilter: Union[int, np.ndarray],
     # ols kwargs
     size=None,
     nfft=None,
@@ -88,24 +125,8 @@ def texshadeSpatial(
   Returns an array the same dimensions as `x` that contains the texture-shaded
   version of the input array.
 
-  `nDiameter` specifies the size of the spatial-domain FIR filter to apply to
-  `x`. It is in the same units as `x`. The larger this is, the closer the output
-  will be to the return value of `texshade.texshadeFFT`. This number controls
-  the size of the neighborhood around a given pixel that contribute to that
-  pixel's final texture-shaded value. If this is too small, the output will
-  differ significantly from the full texture shading algorithm. If it is too
-  big, you may run out of memory, because the overlap-save algorithm for
-  fast-convolution will compute FFTs *at least* this size.
-
-  **Spatial filter generation keyword args** passed to
-  `texshade.hankel.halfHankel`: see that function's docstring for details, but
-  reasonable values are chosen for these:
-
-  - `interpMethod`
-  - `sampleSpacing`
-  - `hbTaps`
-  - `hbTransitionWidth`
-
+  `nDiameterOrFilter`
+  
   **Overlap-save keyword args** passed to `ols.ols` (this function is in the
   `overlap-save` module on PyPI):
 
@@ -145,13 +166,7 @@ def texshadeSpatial(
   Numpy will perform a conversion, which might be expensive. If provided, this
   is returned. If not specified, a new array is allocated, filled, and returned.
   """
-  h = halfHankel(
-      nDiameter,
-      alpha,
-      interpMethod=interpMethod,
-      sampleSpacing=sampleSpacing,
-      hbTaps=hbTaps,
-      hbTransitionWidth=hbTransitionWidth,
-  )
+  h = makeFilter([nDiameterOrFilter], alpha,
+                 x.dtype) if type(nDiameterOrFilter) == int else nDiameterOrFilter
 
   return ols(x, h, size=size, nfft=nfft, out=out)
