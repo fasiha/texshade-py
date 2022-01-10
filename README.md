@@ -8,8 +8,8 @@ Texture-shaded elevation via the fractional-Laplacian operator.
 ![Golden Gate Bridge, Marin to the left, San Francisco to the right, at 1:20,000: texshaded at α=0.8](example-golden-gate.png)
 Golden Gate Bridge, Marin to the left, San Francisco to the right, at 1:20,000: texshaded at α=0.8
 
-![Marin County Handlands, at 1:20,000: texshaded at α=0.8](example-marin-headlands.png)
-(Above: Marin County Handlands, at 1:20,000: texshaded at α=0.8)
+![Marin County Headlands, at 1:20,000: texshaded at α=0.8](example-marin-headlands.png)
+(Above: Marin County Headlands, at 1:20,000: texshaded at α=0.8)
 
 Table of contents:
 
@@ -151,7 +151,7 @@ Because setting up GDAL is often a tricky and laborious process, there are many 
 #### Install Miniconda
 Install [miniconda](https://docs.conda.io/en/latest/miniconda.html), a small command-line application that lets you create conda-based virtual environments, and download/install dependencies.
 
-> Conda is awesome. I avoided it for years because it seemed corporate (Enthought), and because I thought I didn't need another Python environment manager beyond venv? , But conda-forge is a fully volunteer-run organization that packages all kinds of dependencies for all feasible operating systems and CPU architectures. So it's perfect for us to install the C++ and Python GDAL tools.
+> Conda is awesome. I avoided it for years because it seemed corporate (Enthought), and because I thought I didn't need another Python environment manager beyond venv? But conda-forge is a fully volunteer-run organization that packages all kinds of dependencies for all feasible operating systems and CPU architectures. So it's perfect for us to install the C++ and Python GDAL tools.
 
 #### Create a new conda env and install dependencies
 ```bash
