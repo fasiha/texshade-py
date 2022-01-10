@@ -248,7 +248,7 @@ done
 When we called `texshadeFFT` above, Python computed the two-dimensional FFT of the *entire* elevation array. This means that your computer had enough memory to store 
 1. not just the entire elevation array but also
 2. its (real-only) Fourier transform,
-3. the fractional-Laplacian frequency-domain filter $$|\vec f|^α$$.
+3. the fractional-Laplacian frequency-domain filter (the frequency vector's norm raised to power α).
 
 Even if we didn't store #3 above (e.g., if we used Numba to modify #2 in-place), since FFTW cannot do in-place Fourier transforms, we're still left with needing 3× the entire elevation array in free memory. 
 
