@@ -84,22 +84,32 @@ def texshadeSpatial(
   be memory-mapped and/or very large relative to the amount of free system
   memory.
 
+  You must provide either
+  - `alpha` *and* `nDiameter`, or
+  - `filter`.
+
   `alpha` is the shading detail factor, i.e., the power of the
   fractional-Laplacian operator. `alpha=0` means no detail (output is the
   input). `alpha=2.0` is the full (non-fractional) Laplacian operator and is
   probably too high. `alpha <= 1.0` seem aesthetically pleasing.
 
+  `nDiameter` is the width/height of the spatial-domain filter. The larger it
+  is, the more computation needed and the better the approximation. But too
+  small will lead to bad results.
+
+  You can omit `alpha` and `nDiameter` and provide `filter`, the output of
+  `makeFilter`, a rectangular filter to convolve with the input `x`.
+
   Returns an array the same dimensions as `x` that contains the texture-shaded
   version of the input array.
 
-  `nDiameterOrFilter`
-  
   **Overlap-save keyword args** passed to `ols.ols` (this function is in the
   `overlap-save` module on PyPI):
 
   - `size`
   - `nfft`
   - `out`
+  - all `kwargs` will be provided to `ols`.
 
   `size`, a 2-list, specifies the size of the sub-arrays of the texture-shaded
   output to compute in each overlap-save step, while `nfft` (also a 2-list) is
@@ -132,14 +142,12 @@ def texshadeSpatial(
   the algorithm, which will be float64. If `out.dtype` is not `float64`, then
   Numpy will perform a conversion, which might be expensive. If provided, this
   is returned. If not specified, a new array is allocated, filled, and returned.
-
-  `kwargs` will be sent to `ols` (the overlap-save module).
   """
   if filter:
     h = filter
   elif alpha and nDiameter:
     h = makeFilter([nDiameter], alpha, x.dtype)
   else:
-    raise ValueError("either (alpha and nDiameter) or filter needed")
+    raise ValueError("either (alpha, nDiameter) or filter needed")
 
   return ols(x, h, size=size, nfft=nfft, out=out, **kwargs)
