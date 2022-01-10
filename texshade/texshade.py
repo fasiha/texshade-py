@@ -61,7 +61,7 @@ def makeFilter(shape: List[int], alpha: float, dtype=float) -> np.ndarray:
   fx = sf.rfftfreq(shape[1])[np.newaxis, :].astype(dtype)
   H2 = (fx**2 + fy**2)**(alpha / 2.0)
 
-  return sf.ifftshift(sf.irfft2(H2))
+  return sf.fftshift(sf.irfft2(H2))
 
 
 def texshadeSpatial(
@@ -73,7 +73,7 @@ def texshadeSpatial(
     size=None,
     nfft=None,
     out=None,
-) -> np.ndarray:
+    **kwargs) -> np.ndarray:
   """Low-memory approximation of the texture shading algorithm
 
   Unlike `texshade.texshadeFFT`, which computes an FFT of the entire input
@@ -132,6 +132,8 @@ def texshadeSpatial(
   the algorithm, which will be float64. If `out.dtype` is not `float64`, then
   Numpy will perform a conversion, which might be expensive. If provided, this
   is returned. If not specified, a new array is allocated, filled, and returned.
+
+  `kwargs` will be sent to `ols` (the overlap-save module).
   """
   if filter:
     h = filter
@@ -140,4 +142,4 @@ def texshadeSpatial(
   else:
     raise ValueError("either (alpha and nDiameter) or filter needed")
 
-  return ols(x, h, size=size, nfft=nfft, out=out)
+  return ols(x, h, size=size, nfft=nfft, out=out, **kwargs)

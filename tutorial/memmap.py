@@ -14,8 +14,4 @@ tex = np.lib.format.open_memmap('mmap-tex.npy', mode='w+', dtype=np.float64, sha
 
 texshadeSpatial(arr, alpha=alpha, nDiameter=Nwidth, out=tex, size=[1500, 2000])
 
-postprocess.texToPng(
-    tex,
-    'hankel-texshade-alpha-{}-n-{}-mmap.png'.format(alpha, Nwidth),
-    quantiles=[.01, .99],
-    borderFractions=[1e-2, 1e-2])
+postprocess.texToPng(tex, 'mmap.png', quantiles=[.01, .99], borderFractions=[1e-2, 1e-2])

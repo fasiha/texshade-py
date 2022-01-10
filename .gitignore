@@ -11,3 +11,7 @@ __pycache__
 .DS_Store
 *.npz
 *.png
+*.xml
+*.zip
+*.qgz
+*.hgt
