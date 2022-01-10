@@ -1,9 +1,18 @@
 # Texshade
 
-Texture-shaded elevation via the fractional-Laplacian operator (see below if that's confusing 😝)
+Texture-shaded elevation via the fractional-Laplacian operator.
+
+![Mount Sutro and Twin Peaks, San Francisco, at 1:20,000: texshaded at α=0.8](example-twin-peaks.png)
+(Above: Mount Sutro and Twin Peaks, San Francisco, at 1:20,000: texshaded at α=0.8)
+
+![Golden Gate Bridge, from the Bay, at 1:20,000: texshaded at α=0.8](example-golden-gate.png)
+(Above: Golden Gate Bridge, from the Bay, at 1:20,000: texshaded at α=0.8)
+
+![Marin County Handlands, at 1:20,000: texshaded at α=0.8](example-marin-headlands.png)
+(Above: Marin County Handlands, at 1:20,000: texshaded at α=0.8)
 
 Links:
-- if you want to read this math/code document, go to the [homepage](https://fasiha.github.io/texshade-py/);
+- if you want to just read this document, go to the [homepage](https://fasiha.github.io/texshade-py/);
 - if you want to clone the code or open an issue, go to [GitHub](https://github.com/fasiha/texshade-py/);
 - you can also inspect the module on [PyPI](https://pypi.org/project/texshade/);
 - you can also get in touch with me, [Ahmed Fasih](https://fasiha.github.io/#contact).
@@ -12,15 +21,16 @@ Table of contents:
 
 - [Texshade](#texshade)
   - [Introduction](#introduction)
-  - [Installation and usage](#installation-and-usage)
+  - [Installation](#installation)
+  - [API](#api)
     - [`texshadeFFT`](#texshadefft)
     - [`texshadeSpatial`](#texshadespatial)
     - [`makeFilter`](#makefilter)
   - [Tutorial](#tutorial)
     - [Get the tutorial code](#get-the-tutorial-code)
-    - [GDAL setup](#gdal-setup)
-    - [Install Miniconda](#install-miniconda)
-    - [Create a new conda env and install dependencies:](#create-a-new-conda-env-and-install-dependencies)
+    - [Install dependencies](#install-dependencies)
+      - [Install Miniconda](#install-miniconda)
+      - [Create a new conda env and install dependencies](#create-a-new-conda-env-and-install-dependencies)
     - [Download data](#download-data)
     - [Convert the elevation data to a Numpy array](#convert-the-elevation-data-to-a-numpy-array)
     - [Run texshade!](#run-texshade)
@@ -36,7 +46,7 @@ Table of contents:
 
 ## Introduction
 
-The best way to understand texture-shaded elevation is to look at some examples: take your time at the following links to get a visual sense of world with texture shading.
+The best way to understand texture-shaded elevation is to look at some examples: we gave some at the top of this document, but also take your time at the following links to get a visual sense of world with texture shading.
 
 1. Leland Brown's [textureshading.com](http://www.textureshading.com/Home.html) is a great start because that's the inventor of the technique, and the website contrasts raw terrain, texture-shaded terrain, and more conventional hillshaded terrain. (There are also links to papers/slides from 2010 and 2014 describing the technique of texture shading in detail.)
 2. My blog post also contains some pretty images, mashing up various basemaps with texture-shaded terrain: [Texture-shaded Globe](https://fasiha.github.io/post/texshade/).
@@ -44,26 +54,29 @@ The best way to understand texture-shaded elevation is to look at some examples:
 
 In words though, *texture shading* is a visualization technique for digital elevation maps (DEMs) that highlights the network nature of topography, throwing ridges, canyons, and valleys into sharp relief.
 
-This repository contains an open-source public-domain Python/Numpy software library to apply the texture shading algorithm on *extremely* large datasets that are far too large to fit in your computer's memory.
+(In *more* words: it works by applying a specific sharpening filter, called a fractional-Laplacian operator, to the elevation. The filter is applied in the frequency domain.)
 
-> (Don't worry, you can also texture-shade smaller elevation maps as well 😊!)
+This repository contains an open-source public-domain Python/Numpy software library to apply the texture shading algorithm on *extremely* large datasets that are far too large to fit in your computer's memory.
 
 This is useful because a straightforward implementation of the texture-shading technique requires loading the entire elevation map into memory. For large datasets—like the ASTER Global DEM, which comes in at roughly 250 GB compressed—you either have to find a computer with a lot of memory, or you have to modify the technique slightly.
 
 So in this repository, we apply a well-known trick from signal processing theory, called the *overlap-save method*, to avoid loading the entire terrain into memory 😁. However, this trick requires us to approximate the exact texture-shading "filter" slightly 😕. In exchange for being able to process huge elevation datasets, you need to accept approximated texture-shaded images—*visually* you can barely tell the difference 🎆!
 
+> (Don't worry, you can use this repo to texture-shade smaller elevation maps as well 😊!)
 
-## Installation and usage
+## Installation
 To install this library:
 ```
 $ python -m pip install texshade
 ```
+
 To use it, in your Python code:
 ```py
 import texshade
 ```
 
-There are **three** functions in the API—read this if you already know what texture shading is and just want to know how to use this library:
+## API
+There are just three functions in the API. This can serve as a quick introduction to the algorithm itself.
 
 ### `texshadeFFT`
 
@@ -107,7 +120,7 @@ Instead of computing the entire FFT of the input array `x` (like `texshade.texsh
 - if this is too small, the approximation will be inaccurate and you'll get ugly output. You want it big enough so each `nDiameter` by `nDiameter` pixel sub-array of terrain `x` has a rich set of physical features.
 - If this is too large, then you'll run out of RAM performing even the small FFTs needed by the overlap-save fast-convolution.
 
-The three remaining keyword arguments are for the overlap-save ("ols") algorithm that does the fast-convolution and are important to understand when you need to texture-shade huge datasets. They are fully documented in the docstring, so I won't duplicate that here.
+The three remaining keyword arguments are for the overlap-save ("ols") algorithm that does the fast-convolution and are important to understand when you need to texture-shade huge datasets. They are fully documented in the [docstring](./texshade/texshade.py), so I won't duplicate that here.
 
 This function will also pass any other keyword arguments `kwargs` to the [`ols` overlap-save](https://github.com/fasiha/overlap_save-py) module. This lets you override the Scipy FFT with, for example, multi-threaded PyFFTW, etc.
 
@@ -118,7 +131,7 @@ API:
 def makeFilter(shape: List[int], alpha: float, dtype=float) -> np.ndarray
 ```
 
-This function returns the filter (i.e., the approximation to the fractional-Laplacian operator) to use with `texshade.texshadeSpatial`). The output array has dimensions `shape` and type `dtype`. If `shape` has just one element, the output array will be square. If your terrain is a Numpy array of type `float32`, pass in `dtype=numpy.float32`, otherwise it defaults to 64-bit floats.
+**This function returns the filter** (i.e., the approximation to the fractional-Laplacian operator) to use with `texshade.texshadeSpatial`). The output array has dimensions `shape` and type `dtype`. If `shape` has just one element, the output array will be square. If your terrain is a Numpy array of type `float32`, pass in `dtype=numpy.float32`, otherwise it defaults to 64-bit floats.
 
 The shading factor `alpha` is the same as `texshade.texshadeFFT` above.
 
@@ -137,24 +150,28 @@ Let's work through an the entire pipeline that texture shading is a part of:
 ### Get the tutorial code
 There are a few useful scripts in the [./tutorial](./tutorial) directory of this repo. Download them individually, or just clone this repo (install [Git](https://git-scm.com/), run `git clone https://github.com/fasiha/texshade-py.git; cd texshade-py/tutorial`).
 
-### GDAL setup
-If you have the GDAL command-line tools installed, skip to the data step.
+### Install dependencies
+This section is about installing GDAL, imagemagick, and two Python libraries, Pillow and `texshade` itself. Skip to the [data](#download-data) step if you have all those installed.
 
-Because this is often a tricky and laborious process, there are many tutorials online. I'd like to share my approach because it's easy, reliable, cross-platform.
+Because setting up GDAL is often a tricky and laborious process, there are many tutorials online—I'd like to share my approach because it's easy, reliable, cross-platform.
 
-### Install Miniconda
+#### Install Miniconda
 Install [miniconda](https://docs.conda.io/en/latest/miniconda.html), a small command-line application that lets you create conda-based virtual environments, and download/install dependencies.
 
 > Conda is awesome. I avoided it for years because it seemed corporate (Enthought), and because I thought I didn't need another Python environment manager beyond venv? , But conda-forge is a fully volunteer-run organization that packages all kinds of dependencies for all feasible operating systems and CPU architectures. So it's perfect for us to install the C++ and Python GDAL tools.
 
-### Create a new conda env and install dependencies:
+#### Create a new conda env and install dependencies
 ```bash
-conda create -n texshade-tutorial # create environment
-conda activate texshade-tutorial  # "enter" the environment
+# create environment
+conda create -n texshade-tutorial
+# "enter" the environment
+conda activate texshade-tutorial
+# install binary dependencies
 conda install -c conda-forge gdal Pillow imagemagick
+# install this repo
 pip install texshade
 ```
-`gdal` installs all the GDAL tools. `Pillow` and `imagemagick` are used by the tutorial to create and manipulate images. Pip will install `texshade` (this library) from PyPI since I haven't created a conda-forge recipe for it.
+We ask conda to install `gdal`, which is a Swiss Army chainsaw for geographic data process. `Pillow` and `imagemagick` are used by the tutorial to create and manipulate images. Pip is used to install `texshade` (this library) from PyPI since I haven't created a conda-forge recipe for it.
 
 ### Download data
 Download some data! I've downloaded three tiles from the SRTM DEM (from https://dwtkns.com/srtm30m/) on the African coastline near 0° N and 0° W, because I've been loving John K Thornton's *Africa and Africans in the Making of the Atlantic World, 1400-1800*:
@@ -162,8 +179,12 @@ Download some data! I've downloaded three tiles from the SRTM DEM (from https://
 - N00E010.SRTMGL1.hgt.zip
 - N00E011.SRTMGL1.hgt.zip
 
-Unzip all three (useful shell script for macOS/Linux/WSL: `for i in *.hgt.zip; do unzip $i; done`), and then combine them into a single image, `merged.tif`:
+Unzip all three—a useful shell script for macOS/Linux/WSL: 
+```bash
+for i in *.hgt.zip; do unzip $i; done
 ```
+and then combine them into a single image, `merged.tif`:
+```bash
 gdalwarp -of GTiff N00E009.hgt N00E010.hgt N00E011.hgt merged.tif
 ```
 
@@ -186,7 +207,7 @@ Band 1 Block=10801x1 Type=Int16, ColorInterp=Gray
   NoData Value=-32768
   Unit Type: m
 ```
-This looks good: we have a 10801 by 3601 image whose center is close to the equator, as eppected.
+This looks good: we have a 10801 by 3601 image whose center is close to the equator, as expected.
 
 ### Convert the elevation data to a Numpy array
 To confine GDAL and geo-registered images to the edges of my workflow, I want to convert this elevation data to a simple Numpy array. [`convert.py`](./tutorial/convert.py) does that, so run it:

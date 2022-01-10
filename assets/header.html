@@ -2,66 +2,90 @@
 
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Texshade: texture-shaded elevation via the fractional-Laplacian operator</title>
   <meta name="description" content="Public-domain Python library for spicing up elevation maps with Math.">
   <meta name="twitter:card" value="summary">
   <meta property="og:title" content="Texshade: texture-shaded elevation via the fractional-Laplacian operator">
   <meta property="og:type" content="article">
   <meta property="og:url" content="https://fasiha.github.io/texshade-py/">
-  <meta property="og:image"
-    content="https://fasiha.github.io/texshade-py/hankel-texshade-alpha-0.8-n-500-mmap.png.small.png">
+  <meta property="og:image" content="https://fasiha.github.io/texshade-py/hankel-texshade-alpha-0.8-n-500-mmap.png.small.png">
   <meta property="og:description" content="Public-domain Python library for spicing up elevation maps with Math.">
 
-  <link rel="stylesheet" href="assets/retro.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.11.0/dist/katex.min.css"
-    integrity="sha384-BdGj8xC2eZkQaxoQ8nSLefg4AV4/AwB3Fj+8SUSo7pnKP6Eoy18liIKTPn9oBYNG" crossorigin="anonymous">
-
-  <!-- The loading of KaTeX is deferred to speed up page rendering -->
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.11.0/dist/katex.min.js"
-    integrity="sha384-JiKN5O8x9Hhs/UE5cT5AAJqieYlOZbGT3CHws/y97o3ty4R7/O5poG9F3JoiOYw1"
-    crossorigin="anonymous"></script>
-
-  <!-- To automatically render math in text elements, include the auto-render extension: -->
-  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.11.0/dist/contrib/auto-render.min.js"
-    integrity="sha384-kWPLUVMOks5AQFrykwIup5lo0m3iMkkHrD0uJ4H5cjeGihAutqP0yW0J6dpFiVkI" crossorigin="anonymous" onload="renderMathInElement(document.body,{delimiters: [
-      {left: '$$', right: '$$', display: true},
-    {left: '\\(', right: '\\)', display: false}
-]});"></script>
-
-  <script>
-    window.WebFontConfig = {
-      custom: {
-        families: ['KaTeX_AMS', 'KaTeX_Caligraphic:n4,n7', 'KaTeX_Fraktur:n4,n7',
-          'KaTeX_Main:n4,n7,i4,i7', 'KaTeX_Math:i4,i7', 'KaTeX_Script',
-          'KaTeX_SansSerif:n4,n7,i4', 'KaTeX_Size1', 'KaTeX_Size2', 'KaTeX_Size3',
-          'KaTeX_Size4', 'KaTeX_Typewriter'],
-      },
-    };
-  </script>
-  <script defer src="https://cdn.jsdelivr.net/npm/webfontloader@1.6.28/webfontloader.js"
-    integrity="sha256-4O4pS1SH31ZqrSO2A/2QJTVjTPqVe+jnYgOWUVr7EEc=" crossorigin="anonymous"></script>
-
   <style>
+    pre,
     code {
+      font-family: Menlo, Monaco, "Courier New", monospace;
+      font-weight: bold;
+    }
+
+    img {
+      max-width: 100%;
+    }
+
+    /* Adapted from perfectmotherfuckingwebsite */
+    div.bookmark {
+      padding-top: 0.4em;
+      border-bottom: #ddd dotted;
+    }
+
+    div.comment:not(:last-child) {
+      border-bottom: 2px #ddd dotted;
+    }
+
+    pre.unrendered {
       white-space: pre-wrap;
+      display: inline;
+      font-family: inherit;
     }
 
-    span.smallcaps {
-      font-variant: small-caps;
+    a.emojilink {
+      text-decoration: none;
     }
 
-    span.underline {
-      text-decoration: underline;
+    textarea {
+      width: 100%;
+      height: 40vh;
+      font: 20px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
     }
 
-    div.column {
-      display: inline-block;
-      vertical-align: top;
-      width: 50%;
+    body {
+      overflow-wrap: break-word;
+      max-width: 80rem;
+      margin: 10px auto;
+      padding: 0 10px;
+      font: 20px/1.3 "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
+      /* font-family:  */
+      color: #444
+    }
+
+    @media (prefers-color-scheme: dark) {
+      body {
+        color: #ccc;
+        background: #111;
+      }
+
+      a:link {
+        color: #5bf
+      }
+
+      a:visited {
+        color: #ccf
+      }
+
+      div.bookmark {
+        border-bottom: #222 dotted;
+      }
+
+      div.comment:not(:last-child) {
+        border-bottom: 2px #222 dotted;
+      }
+
     }
   </style>
+
   <style>
-    <style>code.sourceCode>span {
+    code.sourceCode>span {
       display: inline-block;
       line-height: 1.25;
     }
@@ -156,7 +180,7 @@
       }
     }
 
-    code span. {
+    code span {
       color: #cfcfc2;
     }
 
