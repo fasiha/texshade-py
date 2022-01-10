@@ -11,12 +11,6 @@ Texture-shaded elevation via the fractional-Laplacian operator.
 ![Marin County Handlands, at 1:20,000: texshaded at α=0.8](example-marin-headlands.png)
 (Above: Marin County Handlands, at 1:20,000: texshaded at α=0.8)
 
-Links:
-- if you want to just read this document, go to the [homepage](https://fasiha.github.io/texshade-py/);
-- if you want to clone the code or open an issue, go to [GitHub](https://github.com/fasiha/texshade-py/);
-- you can also inspect the module on [PyPI](https://pypi.org/project/texshade/);
-- you can also get in touch with me, [Ahmed Fasih](https://fasiha.github.io/#contact).
-
 Table of contents:
 
 - [Texshade](#texshade)
@@ -42,7 +36,6 @@ Table of contents:
       - [Crop 1](#crop-1)
       - [Crop 2](#crop-2)
       - [Crop 3](#crop-3)
-  - [Developing in this repository](#developing-in-this-repository)
 
 ## Introduction
 
@@ -298,6 +291,3 @@ Inspecting these, the only differences I see are due to slight differences in th
 ![Approximate spatial filter, crop 3](tutorial/crop3-mmap.png)
 
 We can finally run the texture shading algorithm on enormous datasets without needing gargantuan amounts of memory!
-
-## Developing in this repository
-To build the HTML, I use Pandoc and coordinate it with the [`Makefile`](./Makefile), which can be invoked by running `$ make`.
