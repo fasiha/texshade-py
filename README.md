@@ -5,8 +5,8 @@ Texture-shaded elevation via the fractional-Laplacian operator.
 ![Mount Sutro and Twin Peaks, San Francisco, at 1:20,000: texshaded at α=0.8](example-twin-peaks.png)
 (Above: Mount Sutro and Twin Peaks, San Francisco, at 1:20,000: texshaded at α=0.8)
 
-![Golden Gate Bridge, from the Bay, at 1:20,000: texshaded at α=0.8](example-golden-gate.png)
-(Above: Golden Gate Bridge, from the Bay, at 1:20,000: texshaded at α=0.8)
+![Golden Gate Bridge, Marin to the left, San Francisco to the right, at 1:20,000: texshaded at α=0.8](example-golden-gate.png)
+Golden Gate Bridge, Marin to the left, San Francisco to the right, at 1:20,000: texshaded at α=0.8
 
 ![Marin County Handlands, at 1:20,000: texshaded at α=0.8](example-marin-headlands.png)
 (Above: Marin County Handlands, at 1:20,000: texshaded at α=0.8)
