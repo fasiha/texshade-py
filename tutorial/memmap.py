@@ -9,14 +9,9 @@ arr = np.load(fname, mmap_mode='r')
 
 alpha = 0.8
 Nwidth = 500
-Nhalfband = 128
 
 tex = np.lib.format.open_memmap('mmap-tex.npy', mode='w+', dtype=np.float64, shape=arr.shape)
 
-texshadeSpatial(arr, alpha, Nwidth, hbTaps=Nhalfband, out=tex, size=[2000, 2000])
+texshadeSpatial(arr, alpha=alpha, nDiameter=Nwidth, out=tex, size=[1500, 2000])
 
-postprocess.texToPng(
-    tex,
-    'hankel-texshade-alpha-{}-n-{}-mmap.png'.format(alpha, Nwidth),
-    quantiles=[.01, .99],
-    borderFractions=[1e-2, 1e-2])
+postprocess.texToPng(tex, 'mmap.png', quantiles=[.01, .99], borderFractions=[1e-2, 1e-2])

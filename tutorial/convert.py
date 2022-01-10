@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-
 """
 Quick script intended to be used only by a user to convert a specific
 GeoTIF to a NPY file for pure-Numpy non-GDAL demo.
 """
 import numpy as np
-import gdal, gdalconst
+from osgeo import gdal, gdalconst
 
 fname = 'merged.tif'
 

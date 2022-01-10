@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 
-import scipy.fftpack as scifft
+import scipy.fft as sf
 import numpy as np
 from nextprod import nextprod
+from ols import ols
+from typing import List, Optional
 
 
 def texshadeFFT(x: np.ndarray, alpha: float) -> np.ndarray:
@@ -37,39 +39,41 @@ def texshadeFFT(x: np.ndarray, alpha: float) -> np.ndarray:
   Nyx = [nextprod([2, 3, 5, 7], x) for x in x.shape]
 
   # Generate filter in the frequency domain
-  fy = scifft.rfftfreq(Nyx[0])[:, np.newaxis].astype(x.dtype)
-  fx = scifft.rfftfreq(Nyx[1])[np.newaxis, :].astype(x.dtype)
+  fy = sf.fftfreq(Nyx[0])[:, np.newaxis].astype(x.dtype)
+  fx = sf.rfftfreq(Nyx[1])[np.newaxis, :].astype(x.dtype)
   H2 = (fx**2 + fy**2)**(alpha / 2.0)
 
-  # Define forward and backwards transforms
-  rfft2 = lambda x: scifft.rfft(scifft.rfft(x, Nyx[1], 1, True), Nyx[0], 0, True)
-  irfft2 = lambda X: scifft.irfft(scifft.irfft(X, axis=0, overwrite_x=True), overwrite_x=True)
-
   # Compute the FFT of the input and apply the filter
-  xr = rfft2(x) * H2
+  xr = sf.rfft2(x, s=Nyx) * H2
   H2 = None  # potentially trigger GC here to reclaim H2's memory
-  xr = irfft2(xr)
+  xr = sf.irfft2(xr)
   # Return the same size as input
   return xr[:x.shape[0], :x.shape[1]]
-from ols import ols
-from .hankel import halfHankel
+
+
+def makeFilter(shape: List[int], alpha: float, dtype=float) -> np.ndarray:
+  assert 1 <= len(shape) <= 2, "shape must be one or two elements"
+  if len(shape) == 1:
+    shape = [shape[0], shape[0]]
+
+  # Generate filter in the frequency domain
+  fy = sf.fftfreq(shape[0])[:, np.newaxis].astype(dtype)
+  fx = sf.rfftfreq(shape[1])[np.newaxis, :].astype(dtype)
+  H2 = (fx**2 + fy**2)**(alpha / 2.0)
+
+  return sf.fftshift(sf.irfft2(H2))
 
 
 def texshadeSpatial(
     x: np.ndarray,
-    alpha: float,
-    # halfHankel args
-    nDiameter: int,
-    # halfHankel kwargs
-    interpMethod=True,
-    sampleSpacing=None,
-    hbTaps=128,
-    hbTransitionWidth=0.03,
+    alpha: Optional[float] = None,
+    nDiameter: Optional[int] = None,
+    filter: Optional[np.ndarray] = None,
     # ols kwargs
     size=None,
     nfft=None,
     out=None,
-) -> np.ndarray:
+    **kwargs) -> np.ndarray:
   """Low-memory approximation of the texture shading algorithm
 
   Unlike `texshade.texshadeFFT`, which computes an FFT of the entire input
@@ -80,31 +84,24 @@ def texshadeSpatial(
   be memory-mapped and/or very large relative to the amount of free system
   memory.
 
+  You must provide either
+  - `alpha` *and* `nDiameter`, or
+  - `filter`.
+
   `alpha` is the shading detail factor, i.e., the power of the
   fractional-Laplacian operator. `alpha=0` means no detail (output is the
   input). `alpha=2.0` is the full (non-fractional) Laplacian operator and is
   probably too high. `alpha <= 1.0` seem aesthetically pleasing.
 
+  `nDiameter` is the width/height of the spatial-domain filter. The larger it
+  is, the more computation needed and the better the approximation. But too
+  small will lead to bad results.
+
+  You can omit `alpha` and `nDiameter` and provide `filter`, the output of
+  `makeFilter`, a rectangular filter to convolve with the input `x`.
+
   Returns an array the same dimensions as `x` that contains the texture-shaded
   version of the input array.
-
-  `nDiameter` specifies the size of the spatial-domain FIR filter to apply to
-  `x`. It is in the same units as `x`. The larger this is, the closer the output
-  will be to the return value of `texshade.texshadeFFT`. This number controls
-  the size of the neighborhood around a given pixel that contribute to that
-  pixel's final texture-shaded value. If this is too small, the output will
-  differ significantly from the full texture shading algorithm. If it is too
-  big, you may run out of memory, because the overlap-save algorithm for
-  fast-convolution will compute FFTs *at least* this size.
-
-  **Spatial filter generation keyword args** passed to
-  `texshade.hankel.halfHankel`: see that function's docstring for details, but
-  reasonable values are chosen for these:
-
-  - `interpMethod`
-  - `sampleSpacing`
-  - `hbTaps`
-  - `hbTransitionWidth`
 
   **Overlap-save keyword args** passed to `ols.ols` (this function is in the
   `overlap-save` module on PyPI):
@@ -112,6 +109,7 @@ def texshadeSpatial(
   - `size`
   - `nfft`
   - `out`
+  - all `kwargs` will be provided to `ols`.
 
   `size`, a 2-list, specifies the size of the sub-arrays of the texture-shaded
   output to compute in each overlap-save step, while `nfft` (also a 2-list) is
@@ -145,13 +143,11 @@ def texshadeSpatial(
   Numpy will perform a conversion, which might be expensive. If provided, this
   is returned. If not specified, a new array is allocated, filled, and returned.
   """
-  h = halfHankel(
-      nDiameter,
-      alpha,
-      interpMethod=interpMethod,
-      sampleSpacing=sampleSpacing,
-      hbTaps=hbTaps,
-      hbTransitionWidth=hbTransitionWidth,
-  )
+  if filter:
+    h = filter
+  elif alpha and nDiameter:
+    h = makeFilter([nDiameter], alpha, x.dtype)
+  else:
+    raise ValueError("either (alpha, nDiameter) or filter needed")
 
-  return ols(x, h, size=size, nfft=nfft, out=out)
+  return ols(x, h, size=size, nfft=nfft, out=out, **kwargs)

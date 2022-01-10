@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import gdal, gdalconst
-from osgeo import osr
+from osgeo import gdal, gdalconst, osr
 
 
 def touint(x: np.ndarray, cmin, cmax, dtype=np.uint8) -> np.ndarray:

@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='texshade',
-    version='1.0',
+    version='2.0',
     author='Ahmed Fasih',
     author_email='ahmed@aldebrn.me',
     description="Memory-efficient implementation of texture-shading method for visualizing elevation",
@@ -10,7 +10,7 @@ setup(
     license='Unlicense',
     url='https://github.com/fasiha/texshade-py',
     packages=['texshade'],
-    install_requires='array-range,mpmath,nextprod,numpy,overlap-save,scipy'.split(','),
+    install_requires='array-range,nextprod,numpy,overlap-save,scipy'.split(','),
     zip_safe=True,
     keywords='texture shading elevation terrain fractional laplacian hankel overlap save spatial frequency',
 )
