@@ -25,21 +25,12 @@ def touint(x: np.ndarray, cmin, cmax, dtype=np.uint8) -> np.ndarray:
   return (ret).astype(dtype)
 
 
-def toPng(scaled: np.ndarray, fname: str):
-  """Write a uint8 array `scaled` to a PNG file `fname`"""
-  from PIL import Image
-  newimage = Image.new('L', (scaled.shape[1], scaled.shape[0]))  # type, (width, height)
-  newimage.putdata(scaled.ravel())
-  newimage.save(fname)
+def texToImageData(tex: np.ndarray, quantiles=None, borderFractions=None):
+  """Quantile a texture-shaded array and prepare it for an 8-bit format
 
-
-def texToPng(tex: np.ndarray, fname: str, quantiles=None, borderFractions=None):
-  """Quantile a texture-shaded array and write it to 8-bit PNG
-
-  Given `tex`, a 2D array, and a `fname` path to a PNG file, and optionally a
-  2-list `quantiles` (defaults to [0.01, 0.99], i.e., 1% and 99%), clamp the
-  array to the quantile-values and write to a PNG. If `borderFractions`, also a
-  2-list, is given, 
+  Given `tex`, a 2D array, and optionally a 2-list `quantiles` (defaults to
+  [0.01, 0.99], i.e., 1% and 99%), clamp the array to the quantile-values and
+  return it. If `borderFractions`, also a 2-list, is given, 
 
   `[np.round(total * frac) for total, frac in zip(tex.shape, borderFractions)]`
   
@@ -58,7 +49,6 @@ def texToPng(tex: np.ndarray, fname: str, quantiles=None, borderFractions=None):
     minmax = np.quantile(tex[slices].ravel(), quantiles)
 
   scaled = touint(tex, minmax[0], minmax[1], np.uint8)
-  toPng(scaled, fname)
   return scaled
 
 
@@ -105,17 +95,19 @@ def createGeoTiff(filename,
   return filename
 
 
-if __name__ == '__main__':
-  tex = np.load('merged.tif.npy.tex.npy')
-  scaled = texToPng(tex, 'scaled.png', quantiles=[.01, .99], borderFractions=[1e-2, 1e-2])
-
-  # save as GeoTiff
+def makeGeoTiffLike(newData, newPath, likePath):
   driver = gdal.GetDriverByName('GTiff')
-  noDataValue, xsize, ysize, geoTransform, proj, dtype = getGeoInfo('merged.tif')
-  createGeoTiff('scaled.tif', scaled, driver, 0, xsize, ysize, geoTransform, proj,
-                gdalconst.GDT_Byte)
-  print('done exporting texshaded PNG and GeoTIFF')
+  noDataValue, xsize, ysize, geoTransform, proj, dtype = getGeoInfo(likePath)
+  createGeoTiff(newPath, newData, driver, 0, xsize, ysize, geoTransform, proj, gdalconst.GDT_Byte)
+  print(
+      f'done exporting texshaded GeoTIFF; to convert to PNG, run `gdal_translate {newPath} {newPath.split(".")[0]}.png`'
+  )
 
-  # write original DEM too
-  tex = np.load('merged.tif.npy')
-  toPng(touint(tex, np.min(tex), np.max(tex), np.uint8), 'orig.png')
+
+if __name__ == '__main__':
+  tex = np.load('merged.vrt.npy.tex.npy')
+  scaled = texToImageData(tex, quantiles=[.01, .99], borderFractions=[1e-2, 1e-2])
+  print('done converting')
+  # save as GeoTiff
+  makeGeoTiffLike(scaled, 'scaled.tif', 'merged.vrt')
+  print('to convert the original DEM to png, run `gdal_translate -scaled merged.vrt orig.png`')

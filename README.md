@@ -176,54 +176,62 @@ Unzip all three—a useful shell script for macOS/Linux/WSL:
 ```bash
 for i in *.hgt.zip; do unzip $i; done
 ```
-and then combine them into a single image, `merged.tif`:
+and then combine them into a single "image", `merged.vrt`:
 ```bash
-gdalwarp -of GTiff N00E009.hgt N00E010.hgt N00E011.hgt merged.tif
+gdalbuildvrt merged.vrt N00E009.hgt N00E010.hgt N00E011.hgt
 ```
 
-Running `gdalinfo merged.tif` produces the following output:
+> VRT is really cool! It's just a little text file that just points to the files on disk with the actual data, and it Just Works with all of GDAL tooling.
+
+Running `gdalinfo merged.vrt` produces the following output:
 ```
-Driver: GTiff/GeoTIFF
-Files: merged.tif
+Driver: VRT/Virtual Raster
+Files: merged.vrt
+       N00E009.hgt
+       N00E010.hgt
+       N00E011.hgt
 Size is 10801, 3601
 ...
 Origin = (8.999861111111111,1.000138888888889)
 Pixel Size = (0.000277777777778,-0.000277777777778)
-...
 Corner Coordinates:
 Upper Left  (   8.9998611,   1.0001389) (  8d59'59.50"E,  1d 0' 0.50"N)
 Lower Left  (   8.9998611,  -0.0001389) (  8d59'59.50"E,  0d 0' 0.50"S)
 Upper Right (  12.0001389,   1.0001389) ( 12d 0' 0.50"E,  1d 0' 0.50"N)
 Lower Right (  12.0001389,  -0.0001389) ( 12d 0' 0.50"E,  0d 0' 0.50"S)
 Center      (  10.5000000,   0.5000000) ( 10d30' 0.00"E,  0d30' 0.00"N)
-Band 1 Block=10801x1 Type=Int16, ColorInterp=Gray
+Band 1 Block=128x128 Type=Int16, ColorInterp=Undefined
   NoData Value=-32768
-  Unit Type: m
 ```
-This looks good: we have a 10801 by 3601 image whose center is close to the equator, as expected.
+This looks good: we have a 10801 by 3601 image whose center is close to the equator, as expected. We do note that there’s a special value, -32768 (`-2**15`), for missing data.
 
 ### Convert the elevation data to a Numpy array
-To confine GDAL and geo-registered images to the edges of my workflow, I want to convert this elevation data to a simple Numpy array. [`convert.py`](./tutorial/convert.py) does that, so run it:
+To confine GDAL and geo-registered images to the edges of my workflow, I want to convert this elevation data to a simple Numpy array. [`convert.py`](./tutorial/convert.py) does that (and takes care of that `NoData Value`), so run it:
 ```
 python convert.py
 ```
-This creates a new file, `merged.tif.npy`.
+This creates a new file, `merged.vrt.npy`.
 
 ### Run texshade!
 It's time to apply the texture-shading algorithm—what you've all come for! [`demo.py`](tutorial/demo.py) exercises the `texshade` library published by this repo. I've picked α of 0.8, and it runs the memory-intensive `texshadeFFT` implementation.
 ```
 python demo.py
 ```
-This creates a new file, `merged.tif.npy.tex.npy` (note the "tex" in the filename).
+This creates a new file, `merged.vrt.npy.tex.npy` (note the "tex" in the filename).
 
 ### Clamp, quantize, and export
 I always clamp the texture-shaded array to between, say, 1-percentile and 99-percentile, to improve the base contrast. (Apps, like my [Texture-Shaded Globe](https://fasiha.github.io/post/texshade/), let you add even more contrast.)
 
-Then I quantize the floating-point data to an 8-bit PNG, as well as a georegistererd TIF. The PNG is great for the web while the GeoTIFF is great for QGIS, etc.
+Then I quantize the floating-point data to 8 bits and write a georegistererd TIF, which is great for QGIS and other GIS tooling, but it's also nice to have a PNG to post on social media.
 
-This is all done in [`postprocess.py`](tutorial/postprocess.py). Run it
+So [`postprocess.py`](tutorial/postprocess.py) takes care of this. Run it
 ```
 python postprocess.py
+```
+then follow the instructions to generate PNGs, specifically,
+```
+gdal_translate scaled.tif scaled.png
+gdal_translate -scaled merged.vrt orig.png
 ```
 to create
 - `scaled.tif`, the texture-shaded GeoTIFF,
@@ -238,11 +246,14 @@ for i in orig.png scaled.png; do
 done
 ```
 
+
 #### Original DEM
 ![original downsampled](tutorial/orig.png.small.png)
 
 #### Tex-shaded DEM
 ![tex-shaded downsampled](tutorial/scaled.png.small.png)
+
+> I hope the tutorial scripts above, `convert.py`, `demo.py`, and `postprocess.py` (and the script below), are reusable! They should be readily adaptable to a wide variety of data and applications.
 
 ### Spatial filtering and fast-convolution for low-memory usage
 When we called `texshadeFFT` above, Python computed the two-dimensional FFT of the *entire* elevation array. This means that your computer had enough memory to store 
@@ -255,6 +266,10 @@ Even if we didn't store #3 above (e.g., if we used Numba to modify #2 in-place),
 Imagine that we wanted to texture-shade our data on a tiny computer with a huge disk. We can load it as a memory-mapped file, so Numpy only reads the chunks of data it needs from disk to RAM, and run `texshadeSpatial`. This is demonstrated in [memmap.py](./tutorial/memmap.py). Run it:
 ```
 python memmap.py
+```
+and follow the instructions to convert from GeoTIFF to PNG:
+```
+gdal_translate mmap.tif mmap.png
 ```
 to produce a file, `mmap.png`.
 

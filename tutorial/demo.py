@@ -3,7 +3,7 @@
 import texshade
 import numpy as np
 
-fname = 'merged.tif.npy'
+fname = 'merged.vrt.npy'
 
 arr = np.load(fname)
 tex = texshade.texshadeFFT(arr, 0.8)
