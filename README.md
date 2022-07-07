@@ -144,7 +144,7 @@ Let's work through an the entire pipeline that texture shading is a part of:
 There are a few useful scripts in the [./tutorial](./tutorial) directory of this repo. Download them individually, or just clone this repo (install [Git](https://git-scm.com/), run `git clone https://github.com/fasiha/texshade-py.git; cd texshade-py/tutorial`).
 
 ### Install dependencies
-This section is about installing GDAL, imagemagick, and two Python libraries, Pillow and `texshade` itself. Skip to the [data](#download-data) step if you have all those installed.
+This section is about installing GDAL, imagemagick, and `texshade` itself. Skip to the [data](#download-data) step if you have all those installed.
 
 Because setting up GDAL is often a tricky and laborious process, there are many tutorials online—I'd like to share my approach because it's easy, reliable, cross-platform.
 
@@ -160,11 +160,11 @@ conda create -n texshade-tutorial
 # "enter" the environment
 conda activate texshade-tutorial
 # install binary dependencies
-conda install -c conda-forge gdal Pillow imagemagick
+conda install -c conda-forge gdal imagemagick
 # install this repo
 pip install texshade
 ```
-We ask conda to install `gdal`, which is a Swiss Army chainsaw for geographic data process. `Pillow` and `imagemagick` are used by the tutorial to create and manipulate images. Pip is used to install `texshade` (this library) from PyPI since I haven't created a conda-forge recipe for it.
+We ask conda to install `gdal`, which is a Swiss Army chainsaw for geographic data process, and `imagemagick`, which is used by the tutorial to create and manipulate images. Pip is used to install `texshade` (this library) from PyPI since I haven't created a conda-forge recipe for it.
 
 ### Download data
 Download some data! I've downloaded three tiles from the SRTM DEM (from https://dwtkns.com/srtm30m/) on the African coastline near 0° N and 0° W, because I've been loving John K Thornton's *Africa and Africans in the Making of the Atlantic World, 1400-1800*:
